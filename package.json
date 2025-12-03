@@ -1,0 +1,12 @@
+{
+  "name": "think",
+  "private": true,
+  "scripts": {
+    "app": "pnpm --filter think-app dev",
+    "ext": "pnpm --filter think-extension build",
+    "backend": "cd backend && poetry run uvicorn app.main:app --reload --port 8765",
+    "build:backend": "cd backend && poetry run pyinstaller think.spec --clean",
+    "build:app": "pnpm --filter think-app build && pnpm --filter think-app electron:build",
+    "build:all": "pnpm build:backend && pnpm build:app"
+  }
+}

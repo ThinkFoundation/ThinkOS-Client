@@ -1,0 +1,82 @@
+# -*- mode: python ; coding: utf-8 -*-
+import sys
+import os
+from pathlib import Path
+
+# Find sqlite-vec dylib
+import sqlite_vec
+sqlite_vec_dir = Path(sqlite_vec.__file__).parent
+sqlite_vec_dylib = sqlite_vec_dir / 'vec0.dylib'
+
+# Detect platform for SQLCipher library
+if sys.platform == 'darwin':
+    # macOS - Homebrew path
+    sqlcipher_lib = '/opt/homebrew/lib/libsqlcipher.0.dylib'
+    if not os.path.exists(sqlcipher_lib):
+        sqlcipher_lib = '/usr/local/lib/libsqlcipher.0.dylib'
+elif sys.platform == 'win32':
+    # Windows - adjust path as needed
+    sqlcipher_lib = 'C:/sqlcipher/sqlcipher.dll'
+else:
+    # Linux
+    sqlcipher_lib = '/usr/lib/libsqlcipher.so.0'
+
+binaries = []
+if os.path.exists(sqlcipher_lib):
+    binaries.append((sqlcipher_lib, '.'))
+if sqlite_vec_dylib.exists():
+    binaries.append((str(sqlite_vec_dylib), 'sqlite_vec'))
+
+a = Analysis(
+    ['run.py'],
+    pathex=[SPECPATH],
+    binaries=binaries,
+    datas=[],
+    hiddenimports=[
+        'app',
+        'app.main',
+        'app.db',
+        'app.ai',
+        'app.secrets',
+        'app.config',
+        'app.models',
+        'pysqlcipher3',
+        'pysqlcipher3.dbapi2',
+        'sqlite_vec',
+        'uvicorn.logging',
+        'uvicorn.protocols.http',
+        'uvicorn.protocols.http.auto',
+        'uvicorn.protocols.websockets',
+        'uvicorn.protocols.websockets.auto',
+        'uvicorn.lifespan',
+        'uvicorn.lifespan.on',
+    ],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    noarchive=False,
+)
+
+pyz = PYZ(a.pure)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+    [],
+    name='think-backend',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=True,  # Set to False for production
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)

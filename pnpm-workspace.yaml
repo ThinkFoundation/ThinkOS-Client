@@ -1,0 +1,7 @@
+packages:
+  - app
+  - extension
+
+onlyBuiltDependencies:
+  - electron
+  - esbuild

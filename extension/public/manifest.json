@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Think - Save to Personal AI",
+  "version": "0.1.0",
+  "description": "Save web pages to your personal AI assistant",
+  "permissions": ["activeTab", "storage", "scripting"],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
