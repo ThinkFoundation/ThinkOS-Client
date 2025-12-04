@@ -21,8 +21,12 @@ export default function Sidebar() {
   return (
     <aside className="w-[72px] h-screen border-r bg-muted/30 flex flex-col py-4">
       <div className="flex justify-center mb-6">
-        <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-          <Sparkles className="h-5 w-5 text-primary-foreground" />
+        <div className="w-10 h-10 flex items-center justify-center">
+          <img 
+            src="/icons/think-os-agent-grey.svg" 
+            alt="Think" 
+            className="w-full h-full object-contain"
+          />
         </div>
       </div>
       <nav className="flex-1 flex flex-col gap-1">

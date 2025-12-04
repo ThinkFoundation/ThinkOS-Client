@@ -32,6 +32,7 @@
       }
     ],
     "mac": {
+      "icon": "build/icon.icns",
       "target": "dmg",
       "category": "public.app-category.productivity",
       "hardenedRuntime": true,

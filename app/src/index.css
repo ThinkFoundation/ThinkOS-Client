@@ -4,30 +4,100 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222.2 84% 4.9%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222.2 84% 4.9%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Backgrounds */
+    --background: 40 100% 99%;        /* #FFFEFC - Warm white */
+    --card: 60 1% 99.8%;              /* #FFFFFE - Pure white cards */
+    --popover: 60 1% 99.8%;
+
+    /* Text */
+    --foreground: 222.2 84% 5%;       /* Dark navy text */
+    --muted-foreground: 215.4 16.3% 46.9%; /* Secondary text */
+
+    /* Brand Primary */
+    --primary: 192 61% 59%;           /* #58BED7 - Think Turquoise */
+    --primary-foreground: 210 40% 98%; /* Text on primary */
+    --ring: 192 61% 59%;              /* Focus ring */
+
+    /* UI Elements */
+    --secondary: 210 40% 96.1%;       /* Gray backgrounds */
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --border: 214.3 31.8% 91.4%;      /* #E5E7EB equivalent */
+    --input: 40 100% 99%;             /* #FFFEFC */
+
+    /* Status Colors */
+    --destructive: 0 84% 60%;         /* Red for errors/delete */
+    --destructive-foreground: 210 40% 98%;
+
     --radius: 0.5rem;
   }
 
+  .dark {
+    --background: 0 0% 5%;            /* Near black */
+    --foreground: 48 86% 97%;         /* Warm white text */
+    --card: 230 30% 12%;              /* Dark blue-gray cards */
+    --card-foreground: 48 86% 97%;
+    --popover: 230 30% 12%;
+    --popover-foreground: 48 86% 97%;
+    --primary: 192 61% 59%;           /* Same Think Turquoise */
+    --primary-foreground: 210 40% 98%;
+    --secondary: 240 9% 15%;
+    --secondary-foreground: 48 86% 97%;
+    --muted: 230 55% 8%;
+    --muted-foreground: 235 9% 49%;
+    --accent: 230 22% 12%;
+    --accent-foreground: 48 86% 97%;
+    --border: 235 26% 16%;
+    --input: 235 26% 16%;
+    --ring: 192 61% 59%;              /* Same Think Turquoise */
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+  }
+}
+
+@layer base {
   * {
     @apply border-border;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
-
+  *::-webkit-scrollbar {
+    display: none;
+  }
   body {
     @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+             Ubuntu, Cantarell, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     background-image:
-      radial-gradient(at 0% 0%, hsl(210 40% 96% / 0.5) 0%, transparent 50%),
-      radial-gradient(at 100% 100%, hsl(222 47% 95% / 0.5) 0%, transparent 50%);
+      radial-gradient(at 0% 0%, hsl(192 61% 59% / 0.1) 0%, transparent 50%),
+      radial-gradient(at 100% 100%, hsl(192 61% 59% / 0.1) 0%, transparent 50%);
+  }
+}
+
+@layer components {
+  .streaming-dot {
+    @apply animate-bounce;
+    animation-duration: 0.6s;
+  }
+
+  .status-dot {
+    @apply h-2.5 w-2.5 rounded-full;
+  }
+
+  .status-dot.connected {
+    @apply bg-green-500 animate-pulse;
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-8px); }
+    40%, 80% { transform: translateX(8px); }
+  }
+  .animate-shake {
+    animation: shake 0.4s ease-in-out;
   }
 }

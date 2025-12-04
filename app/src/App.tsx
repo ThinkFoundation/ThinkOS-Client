@@ -9,6 +9,7 @@ import SettingsPage from "./pages/SettingsPage";
 import { NamePromptDialog } from "./components/NamePromptDialog";
 import { Button } from "@/components/ui/button";
 import { API_BASE_URL } from "./constants";
+import { useSystemTheme } from "@/hooks/useSystemTheme";
 
 const APP_VERSION = "1.1.0";
 
@@ -26,6 +27,8 @@ function App() {
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [userName, setUserName] = useState<string | null>(null);
   const [showNameDialog, setShowNameDialog] = useState(false);
+
+  useSystemTheme();
 
   useEffect(() => {
     // Check if running in Electron
@@ -139,9 +142,15 @@ function App() {
 
   if (appState === "waiting_for_backend") {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        <p className="text-muted-foreground">Starting ThinkOS...</p>
+      <div className="flex flex-col items-center justify-center min-h-screen gap-6 bg-background">
+        <div className="flex flex-col items-center gap-2">
+          <img src="/branding/Think_OS_Full_Word_Mark-lightmode.svg" alt="Think" className="h-8 dark:hidden" />
+          <img src="/branding/Think_OS_Full_Word_Mark.svg" alt="Think" className="h-8 hidden dark:block" />
+        </div>
+        <div className="flex items-center gap-3">
+           <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent"></div>
+           <p className="text-muted-foreground font-medium">Starting ThinkOS...</p>
+        </div>
       </div>
     );
   }

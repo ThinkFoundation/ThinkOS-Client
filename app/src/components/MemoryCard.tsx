@@ -50,8 +50,8 @@ function DomainBadge({ url }: { url: string }) {
       rel="noopener noreferrer"
       className={cn(
         "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full",
-        "bg-slate-100 text-slate-600",
-        "hover:bg-slate-200 hover:text-slate-800",
+        "bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300",
+        "hover:bg-slate-200 hover:text-slate-800 dark:hover:bg-white/15 dark:hover:text-slate-200",
         "transition-colors"
       )}
       title={url}
@@ -78,12 +78,12 @@ export function MemoryCard({
     <div
       className={cn(
         "group relative p-5 rounded-2xl",
-        // Glassmorphism
-        "bg-white/70 backdrop-blur-md",
-        "border border-white/60",
-        "shadow-sm shadow-black/5",
+        // Glassmorphism - light mode
+        "bg-white/70 dark:bg-white/5 backdrop-blur-md",
+        "border border-white/60 dark:border-white/10",
+        "shadow-sm shadow-black/5 dark:shadow-black/20",
         // Hover lift effect
-        "hover:shadow-lg hover:shadow-black/10",
+        "hover:shadow-lg hover:shadow-black/10 dark:hover:shadow-black/30",
         "hover:scale-[1.01] hover:-translate-y-0.5",
         "transition-all duration-200"
       )}
@@ -154,7 +154,7 @@ export function MemoryCard({
                 "inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-full",
                 "transition-colors",
                 tag.source === "ai"
-                  ? "bg-slate-100 text-slate-500"
+                  ? "bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400"
                   : "bg-primary/10 text-primary"
               )}
             >

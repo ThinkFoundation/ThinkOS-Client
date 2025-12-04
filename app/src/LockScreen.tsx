@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
+import { Fingerprint, Loader2, ArrowRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { API_BASE_URL } from './constants';
 
 interface Props {
@@ -12,21 +13,22 @@ interface Props {
 export default function LockScreen({ needsSetup, onUnlock }: Props) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [shaking, setShaking] = useState(false);
+
+  const triggerShake = () => {
+    setShaking(true);
+    setTimeout(() => setShaking(false), 400);
+  };
 
   const handleSetup = async () => {
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters');
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
+    if (password.length < 8 || password !== confirmPassword) {
+      triggerShake();
       return;
     }
 
     setLoading(true);
-    setError('');
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/auth/setup`, {
@@ -36,21 +38,22 @@ export default function LockScreen({ needsSetup, onUnlock }: Props) {
       });
 
       if (res.ok) {
-        onUnlock();
+        setSuccess(true);
+        setTimeout(() => onUnlock(), 600);
       } else {
-        const data = await res.json();
-        setError(data.detail || 'Setup failed');
+        triggerShake();
+        setLoading(false);
       }
     } catch {
-      setError('Could not connect to server');
-    } finally {
+      triggerShake();
       setLoading(false);
     }
   };
 
   const handleUnlock = async () => {
+    if (!password) return;
+
     setLoading(true);
-    setError('');
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/auth/unlock`, {
@@ -60,70 +63,131 @@ export default function LockScreen({ needsSetup, onUnlock }: Props) {
       });
 
       if (res.ok) {
-        onUnlock();
+        setSuccess(true);
+        setTimeout(() => onUnlock(), 600);
       } else {
-        setError('Invalid password');
+        triggerShake();
+        setPassword('');
+        setLoading(false);
       }
     } catch {
-      setError('Could not connect to server');
-    } finally {
+      triggerShake();
       setLoading(false);
     }
   };
 
-  if (needsSetup) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Card className="w-[400px]">
-          <CardHeader>
-            <CardTitle>Create Master Password</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Your data will be encrypted with this password. Make sure to remember it — there is no recovery option.
-            </p>
-            <Input
-              type="password"
-              placeholder="Password (min 8 characters)"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            <Input
-              type="password"
-              placeholder="Confirm password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-            />
-            {error && <p className="text-sm text-red-500">{error}</p>}
-            <Button className="w-full" onClick={handleSetup} disabled={loading}>
-              {loading ? 'Setting up...' : 'Create Password'}
-            </Button>
+  return (
+    <div className={cn(
+      "relative flex items-center justify-center min-h-screen bg-background p-4 transition-opacity duration-500",
+      success && "opacity-0"
+    )}>
+      {/* Animated gradient background orbs */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -left-40 w-80 h-80 bg-primary/20 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute -bottom-40 -right-40 w-80 h-80 bg-primary/15 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+      </div>
+
+      <div className="relative w-full max-w-[320px] space-y-8">
+        {/* Logo */}
+        <div className="flex justify-center">
+          <img
+            src="/branding/Think_OS_Full_Word_Mark-lightmode.svg"
+            alt="Think"
+            className="h-8 dark:hidden"
+          />
+          <img
+            src="/branding/Think_OS_Full_Word_Mark.svg"
+            alt="Think"
+            className="h-8 hidden dark:block"
+          />
+        </div>
+
+        {/* Fingerprint Icon */}
+        <div className="flex justify-center">
+          <div className={cn(
+            "transition-all duration-500 ease-out",
+            success && "scale-125",
+            loading && "opacity-50"
+          )}>
+            <Fingerprint className={cn(
+              "h-16 w-16 transition-colors duration-500",
+              success ? "text-green-500" : "text-primary",
+              !loading && !success && "animate-pulse"
+            )} />
+          </div>
+        </div>
+
+        {/* Minimal Card */}
+        <Card className={cn(
+          "shadow-large bg-white/70 dark:bg-white/5 backdrop-blur-xl border-white/60 dark:border-white/10",
+          shaking && "animate-shake"
+        )}>
+          <CardContent className="pt-6 pb-6">
+            <div className="space-y-3">
+              {needsSetup ? (
+                <>
+                  <div className="relative">
+                    <Input
+                      type="password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      disabled={loading || success}
+                      className="text-center pl-10 pr-10"
+                    />
+                  </div>
+                  <div className="relative">
+                    <Input
+                      type="password"
+                      placeholder="••••••••"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && !loading && handleSetup()}
+                      disabled={loading || success}
+                      className="text-center pl-10 pr-10"
+                    />
+                    <button
+                      onClick={handleSetup}
+                      disabled={loading || success}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+                    >
+                      {loading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <ArrowRight className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="relative">
+                  <Input
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && !loading && handleUnlock()}
+                    autoFocus
+                    disabled={loading || success}
+                    className="text-center pl-10 pr-10"
+                  />
+                  <button
+                    onClick={handleUnlock}
+                    disabled={loading || success}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+                  >
+                    {loading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ArrowRight className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center justify-center min-h-screen">
-      <Card className="w-[400px]">
-        <CardHeader>
-          <CardTitle>Unlock Think</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Input
-            type="password"
-            placeholder="Master password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
-          />
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <Button className="w-full" onClick={handleUnlock} disabled={loading}>
-            {loading ? 'Unlocking...' : 'Unlock'}
-          </Button>
-        </CardContent>
-      </Card>
     </div>
   );
 }

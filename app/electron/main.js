@@ -137,6 +137,7 @@ function createWindow() {
     height: 800,
     minWidth: 1024,
     minHeight: 768,
+    icon: path.join(__dirname, '../public/icons/think-os-agent.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -153,6 +154,17 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // Set app name (for dev mode - production uses productName from package.json)
+  app.setName('Think');
+
+  // Set dock icon on macOS (for dev mode)
+  if (process.platform === 'darwin' && !app.isPackaged) {
+    const iconPath = path.join(__dirname, '../public/icons/think-os-agent.png');
+    if (fs.existsSync(iconPath)) {
+      app.dock.setIcon(iconPath);
+    }
+  }
+
   // Install native messaging host manifests for browser extension
   const resourcesPath = app.isPackaged ? process.resourcesPath : path.join(__dirname, '../..');
   const isDev = !app.isPackaged;

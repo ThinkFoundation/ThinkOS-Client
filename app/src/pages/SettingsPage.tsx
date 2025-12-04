@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Check, Circle, Loader2 } from "lucide-react";
+import { Check, Circle, Loader2, Monitor, Sun, Moon } from "lucide-react";
 import { API_BASE_URL } from "../constants";
+import { Theme, setTheme, getTheme } from "@/hooks/useSystemTheme";
 
 interface Settings {
   ai_provider: string;
@@ -37,6 +38,9 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
   const [originalName, setOriginalName] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
+
+  // Theme state
+  const [theme, setThemeState] = useState<Theme>(getTheme);
 
   useEffect(() => {
     fetchSettings();
@@ -139,6 +143,11 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
     setSettings({ ...settings, ai_provider: provider });
   };
 
+  const handleThemeChange = (newTheme: Theme) => {
+    setThemeState(newTheme);
+    setTheme(newTheme);
+  };
+
   return (
     <div className="p-8 max-w-2xl mx-auto">
       <h1 className="text-2xl font-semibold mb-6">Settings</h1>
@@ -174,6 +183,40 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
             ) : null}
             {profileSaved ? "Saved" : "Save Profile"}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Appearance Section */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-base">Appearance</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2">
+            {[
+              { value: "system" as Theme, label: "System", icon: Monitor },
+              { value: "light" as Theme, label: "Light", icon: Sun },
+              { value: "dark" as Theme, label: "Dark", icon: Moon },
+            ].map(({ value, label, icon: Icon }) => (
+              <button
+                key={value}
+                onClick={() => handleThemeChange(value)}
+                className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-md border transition-colors ${
+                  theme === value
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:bg-muted/50"
+                }`}
+              >
+                <Icon className={`h-4 w-4 ${theme === value ? "text-primary" : "text-muted-foreground"}`} />
+                <span className={`text-sm font-medium ${theme === value ? "text-foreground" : "text-muted-foreground"}`}>
+                  {label}
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">
+            Choose your preferred theme
+          </p>
         </CardContent>
       </Card>
 

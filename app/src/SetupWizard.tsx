@@ -27,6 +27,35 @@ declare global {
   }
 }
 
+function WizardLayout({ title, children }: { title?: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-background p-4">
+      <div className="w-full max-w-[400px] space-y-8">
+        <div className="flex justify-center">
+           <img 
+              src="/branding/Think_OS_Full_Word_Mark-lightmode.svg" 
+              alt="Think" 
+              className="h-12 dark:hidden" 
+            />
+            <img 
+              src="/branding/Think_OS_Full_Word_Mark.svg" 
+              alt="Think" 
+              className="h-12 hidden dark:block" 
+            />
+        </div>
+        <Card className="shadow-large">
+          <CardHeader className="pb-2">
+             {title && <CardTitle className="text-center text-lg font-semibold">{title}</CardTitle>}
+          </CardHeader>
+          <CardContent>
+            {children}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 export default function SetupWizard({ onComplete }: Props) {
   const [step, setStep] = useState<SetupStep>('check');
   const [progress, setProgress] = useState(0);
@@ -155,76 +184,66 @@ export default function SetupWizard({ onComplete }: Props) {
 
   if (step === 'check') {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Card className="w-[400px]">
-          <CardHeader>
-            <CardTitle>Setting up Think...</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">Checking for local AI...</p>
-          </CardContent>
-        </Card>
-      </div>
+      <WizardLayout title="Setting up Think...">
+        <div className="flex flex-col items-center justify-center py-6">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="text-muted-foreground">Checking for local AI...</p>
+        </div>
+      </WizardLayout>
     );
   }
 
   if (step === 'choose') {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Card className="w-[400px]">
-          <CardHeader>
-            <CardTitle>{ollamaInstalled ? 'Start Ollama' : 'Choose Your AI Provider'}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-muted-foreground mb-4">
-              {ollamaInstalled
-                ? 'Ollama is installed but not running. Start it to use local AI.'
-                : 'Think works with local AI (Ollama) or cloud providers (OpenAI, Claude).'}
-            </p>
-            {error && <p className="text-destructive text-sm">{error}</p>}
+      <WizardLayout title={ollamaInstalled ? 'Start Ollama' : 'Choose Your AI Provider'}>
+          <p className="text-muted-foreground text-center mb-6 text-sm">
+            {ollamaInstalled
+              ? 'Ollama is installed but not running. Start it to use local AI.'
+              : 'Think works best with local AI (Ollama) for privacy and speed. You can also use cloud providers.'}
+          </p>
+          <div className="space-y-3">
+            {error && <p className="text-destructive text-sm text-center bg-destructive/10 p-2 rounded-md">{error}</p>}
             <Button className="w-full" onClick={installOllama}>
-              {ollamaInstalled ? 'Start Ollama' : 'Install Ollama (Free, Private)'}
+              {ollamaInstalled ? 'Start Ollama' : 'Install Ollama (Recommended)'}
             </Button>
-            <Button variant="secondary" className="w-full" onClick={onComplete}>
-              Use Cloud API Only
+            <Button variant="ghost" className="w-full text-muted-foreground hover:text-foreground" onClick={onComplete}>
+              Skip and use Cloud API only
             </Button>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+      </WizardLayout>
     );
   }
 
   if (step === 'installing' || step === 'pulling') {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Card className="w-[400px]">
-          <CardHeader>
-            <CardTitle>
-              {step === 'installing' ? 'Installing Ollama' : 'Downloading AI Model'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Progress value={progress} className="w-full" />
-            <p className="text-sm text-muted-foreground">{statusText}</p>
-          </CardContent>
-        </Card>
-      </div>
+      <WizardLayout title={step === 'installing' ? 'Installing Ollama' : 'Downloading AI Model'}>
+          <div className="py-4 space-y-4">
+            <Progress value={progress} className="w-full h-2" />
+            <div className="flex justify-between text-xs text-muted-foreground">
+               <span>{statusText}</span>
+               <span>{Math.round(progress)}%</span>
+            </div>
+          </div>
+      </WizardLayout>
     );
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <Card className="w-[400px]">
-        <CardHeader>
-          <CardTitle>You're All Set!</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-muted-foreground">Ollama is running. You can now use local AI.</p>
+    <WizardLayout title="You're All Set!">
+        <div className="space-y-6 text-center">
+          <div className="w-16 h-16 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center mx-auto">
+            <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <p className="text-muted-foreground">
+            Ollama is running and models are ready. <br/>
+            You can now use Think with local AI.
+          </p>
           <Button className="w-full" onClick={onComplete}>
             Get Started
           </Button>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+    </WizardLayout>
   );
 }
