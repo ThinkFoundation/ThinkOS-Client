@@ -9,14 +9,25 @@ from .routes import router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Start native messaging socket server for secure extension communication
+    from .native_messaging import start_native_messaging_server, stop_native_messaging_server
+
+    await start_native_messaging_server()
     yield
+    await stop_native_messaging_server()
 
 
 app = FastAPI(title="Think API", lifespan=lifespan)
 
+# CORS restricted to Electron app origins only
+# Browser extension uses native messaging (no HTTP), so it doesn't need CORS access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",  # Vite dev server
+        "file://",  # Electron production (loads from file://)
+        "app://.",  # Electron custom protocol (if used)
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

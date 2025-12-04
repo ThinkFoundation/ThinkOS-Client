@@ -77,6 +77,45 @@ exe = EXE(
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
+    codesign_identity=os.environ.get('CODESIGN_IDENTITY'),
+    entitlements_file='entitlements.plist' if sys.platform == 'darwin' else None,
+)
+
+# Native messaging stub for browser extension communication
+stub_script = 'native_host/stub_win.py' if sys.platform == 'win32' else 'native_host/stub.py'
+
+stub_a = Analysis(
+    [stub_script],
+    pathex=[SPECPATH],
+    binaries=[],
+    datas=[],
+    hiddenimports=[],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    noarchive=False,
+)
+
+stub_pyz = PYZ(stub_a.pure)
+
+stub_exe = EXE(
+    stub_pyz,
+    stub_a.scripts,
+    stub_a.binaries,
+    stub_a.datas,
+    [],
+    name='think-native-stub',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,  # No console window for native host
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=os.environ.get('CODESIGN_IDENTITY'),
+    entitlements_file='entitlements.plist' if sys.platform == 'darwin' else None,
 )

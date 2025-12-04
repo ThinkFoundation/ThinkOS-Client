@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { Button } from '@/components/ui/button';
-import { API_BASE_URL } from './constants';
+import { saveMemory, updateMemory, type SaveMemoryResult } from './native-client';
 import './index.css';
 
 interface DuplicateInfo {
@@ -10,7 +10,7 @@ interface DuplicateInfo {
   created_at: string;
 }
 
-interface PendingNote {
+interface PendingMemory {
   url: string;
   title: string;
   content: string;
@@ -20,7 +20,7 @@ function Popup() {
   const [status, setStatus] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [duplicate, setDuplicate] = useState<DuplicateInfo | null>(null);
-  const [pending, setPending] = useState<PendingNote | null>(null);
+  const [pending, setPending] = useState<PendingMemory | null>(null);
 
   const savePage = async () => {
     setSaving(true);
@@ -35,33 +35,29 @@ function Popup() {
         func: () => document.body.innerText
       });
 
-      const noteData = {
+      const memoryData = {
         url: tab.url,
-        title: tab.title,
-        content: result.result
+        title: tab.title || '',
+        content: result.result as string
       };
 
-      const response = await fetch(`${API_BASE_URL}/api/notes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(noteData)
-      });
+      const response = await saveMemory(memoryData) as SaveMemoryResult;
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.duplicate) {
-          setDuplicate(data.existing_note);
-          setPending(noteData as PendingNote);
-          setStatus('');
-        } else {
-          setStatus('Saved!');
-        }
+      if ('duplicate' in response && response.duplicate) {
+        setDuplicate(response.existing_memory);
+        setPending(memoryData as PendingMemory);
+        setStatus('');
       } else {
-        setStatus('Error saving. Is the app running?');
+        setStatus('Saved!');
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      setStatus('Error: ' + message);
+      // Provide helpful message for common errors
+      if (message.includes('not running') || message.includes('connect') || message.includes('exited')) {
+        setStatus('Please open the Think app first');
+      } else {
+        setStatus('Error: ' + message);
+      }
     } finally {
       setSaving(false);
     }
@@ -73,17 +69,8 @@ function Popup() {
     setStatus('Updating...');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/notes/${duplicate.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(pending)
-      });
-
-      if (response.ok) {
-        setStatus('Updated!');
-      } else {
-        setStatus('Error updating.');
-      }
+      await updateMemory(duplicate.id, pending);
+      setStatus('Updated!');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setStatus('Error: ' + message);

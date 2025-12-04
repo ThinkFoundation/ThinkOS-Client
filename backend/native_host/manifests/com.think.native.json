@@ -1,0 +1,9 @@
+{
+  "name": "com.think.native",
+  "description": "Think Native Messaging Host - Secure communication between Think browser extension and desktop app",
+  "path": "${STUB_PATH}",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://${EXTENSION_ID}/"
+  ]
+}

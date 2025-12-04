@@ -2,7 +2,7 @@ import asyncio
 
 import httpx
 import numpy as np
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 from ..config import settings
 from .secrets import get_api_key
@@ -45,8 +45,8 @@ async def _get_openai_embedding(text: str) -> list[float]:
     if not api_key:
         raise ValueError("OpenAI API key not configured")
 
-    client = OpenAI(api_key=api_key)
-    response = client.embeddings.create(
+    client = AsyncOpenAI(api_key=api_key)
+    response = await client.embeddings.create(
         model=settings.openai_embedding_model,
         input=text,
     )

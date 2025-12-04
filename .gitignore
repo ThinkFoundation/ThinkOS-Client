@@ -33,3 +33,9 @@ out/
 
 build/
 release/
+
+# Extension private key (do not commit!)
+extension/extension.pem
+
+# Compiled native messaging stub
+backend/native_host/think-native-stub

@@ -3,6 +3,7 @@ const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
+const { installNativeHost } = require('../scripts/install-native-host');
 
 let mainWindow;
 let pythonProcess;
@@ -43,6 +44,38 @@ function waitForBackendReady() {
 
     checkHealth();
   });
+}
+
+/**
+ * Start Ollama if installed but not running
+ */
+async function ensureOllamaRunning() {
+  // Check if already running
+  try {
+    const response = await fetch('http://localhost:11434/api/tags');
+    if (response.ok) {
+      console.log('Ollama is already running');
+      return;
+    }
+  } catch {
+    // Not running, continue to start it
+  }
+
+  // Check if installed and start it
+  const platform = process.platform;
+  if (platform === 'darwin') {
+    const ollamaAppPath = '/Applications/Ollama.app';
+    if (fs.existsSync(ollamaAppPath)) {
+      console.log('Starting Ollama...');
+      spawn('open', [ollamaAppPath], { detached: true, stdio: 'ignore' });
+    }
+  } else if (platform === 'win32') {
+    const ollamaPath = path.join(process.env.LOCALAPPDATA, 'Programs', 'Ollama', 'ollama.exe');
+    if (fs.existsSync(ollamaPath)) {
+      console.log('Starting Ollama...');
+      spawn(ollamaPath, ['serve'], { detached: true, stdio: 'ignore' });
+    }
+  }
 }
 
 function getBackendPath() {
@@ -102,6 +135,8 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    minWidth: 1024,
+    minHeight: 768,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -118,6 +153,14 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // Install native messaging host manifests for browser extension
+  const resourcesPath = app.isPackaged ? process.resourcesPath : path.join(__dirname, '../..');
+  const isDev = !app.isPackaged;
+  installNativeHost(resourcesPath, undefined, isDev);
+
+  // Start Ollama if installed (don't wait, let it start in background)
+  ensureOllamaRunning();
+
   startPythonBackend();
   createWindow();  // Show window immediately with loading state
 

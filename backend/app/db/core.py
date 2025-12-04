@@ -12,7 +12,6 @@ import asyncio
 from pysqlcipher3 import dbapi2 as sqlcipher
 import sqlite_vec
 
-from ..models import Base
 
 
 def serialize_embedding(embedding: list[float]) -> bytes:
@@ -61,7 +60,9 @@ def _on_connect(dbapi_conn, connection_record) -> None:
     """Set the encryption key and load sqlite-vec when connection is created."""
     if _db_key:
         cursor = dbapi_conn.cursor()
-        cursor.execute(f"PRAGMA key = '{_db_key}'")
+        # Escape single quotes to prevent SQL injection
+        escaped_key = _db_key.replace("'", "''")
+        cursor.execute(f"PRAGMA key = '{escaped_key}'")
         cursor.close()
     dbapi_conn.enable_load_extension(True)
     sqlite_vec.load(dbapi_conn)
@@ -102,27 +103,21 @@ def run_sync(func):
 
 
 async def init_db(db_key: str):
-    """Initialize database with encryption."""
+    """Initialize database with encryption and run migrations."""
     init_engine(db_key)
 
-    def run_migrations():
-        if not _engine: 
+    def setup_database():
+        if not _engine:
             return
+
+        from .migrations import run_migrations
 
         with _engine.connect() as connection:
-            result = connection.execute(text("PRAGMA table_info(notes)")).fetchall()
-            columns = [row[1] for row in result]
-            if "embedding" not in columns:
-                connection.execute(text("ALTER TABLE notes ADD COLUMN embedding BLOB"))
-                connection.commit()
+            applied = run_migrations(connection)
+            for version, desc in applied:
+                print(f"Applied migration {version}: {desc}")
 
-    def create_tables():
-        if not _engine: 
-            return
-        Base.metadata.create_all(_engine)
-
-    await run_sync(create_tables)
-    await run_sync(run_migrations)
+    await run_sync(setup_database)
 
 
 def is_db_initialized() -> bool:
