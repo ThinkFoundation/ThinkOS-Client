@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Fingerprint, Loader2, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { API_BASE_URL } from './constants';
+import { apiFetch } from '@/lib/api';
 
 interface Props {
   needsSetup: boolean;
@@ -31,7 +31,7 @@ export default function LockScreen({ needsSetup, onUnlock }: Props) {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/auth/setup`, {
+      const res = await apiFetch('/api/auth/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),
@@ -56,7 +56,7 @@ export default function LockScreen({ needsSetup, onUnlock }: Props) {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/auth/unlock`, {
+      const res = await apiFetch('/api/auth/unlock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),

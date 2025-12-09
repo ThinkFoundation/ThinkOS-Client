@@ -8,8 +8,8 @@ import MemoriesPage from "./pages/MemoriesPage";
 import SettingsPage from "./pages/SettingsPage";
 import { NamePromptDialog } from "./components/NamePromptDialog";
 import { Button } from "@/components/ui/button";
-import { API_BASE_URL } from "./constants";
 import { useSystemTheme } from "@/hooks/useSystemTheme";
+import { initializeApiToken, apiFetch } from "@/lib/api";
 
 const APP_VERSION = "1.1.0";
 
@@ -34,7 +34,11 @@ function App() {
     // Check if running in Electron
     if (window.electronAPI) {
       // Listen for backend ready signal from main process
-      window.electronAPI.onBackendReady(() => {
+      window.electronAPI.onBackendReady((data: { token?: string } | undefined) => {
+        // Initialize the API token for authenticated requests
+        if (data?.token) {
+          initializeApiToken(data.token);
+        }
         setAppState("loading");
         checkAuthStatus();
       });
@@ -57,7 +61,7 @@ function App() {
 
   const checkAuthStatus = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/auth/status`);
+      const res = await apiFetch("/api/auth/status");
       if (!res.ok) {
         throw new Error(`Server error: ${res.status}`);
       }
@@ -89,13 +93,11 @@ function App() {
 
     // Verify Ollama is actually working if that's the configured provider
     try {
-      const settingsRes = await fetch(`${API_BASE_URL}/api/settings`);
+      const settingsRes = await apiFetch("/api/settings");
       const settings = await settingsRes.json();
 
       if (settings.ai_provider === "ollama") {
-        const ollamaRes = await fetch(
-          `${API_BASE_URL}/api/settings/ollama-status`
-        );
+        const ollamaRes = await apiFetch("/api/settings/ollama-status");
         const ollamaStatus = await ollamaRes.json();
 
         if (!ollamaStatus.running) {
@@ -112,7 +114,7 @@ function App() {
 
   const fetchUserProfile = async (): Promise<string | null> => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/settings/profile`);
+      const res = await apiFetch("/api/settings/profile");
       if (res.ok) {
         const data = await res.json();
         const name = data.name || null;

@@ -3,8 +3,8 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Check, Circle, Loader2, Monitor, Sun, Moon } from "lucide-react";
-import { API_BASE_URL } from "../constants";
 import { Theme, setTheme, getTheme } from "@/hooks/useSystemTheme";
+import { apiFetch } from "@/lib/api";
 
 interface Settings {
   ai_provider: string;
@@ -53,7 +53,7 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/settings`);
+      const res = await apiFetch("/api/settings");
       if (res.ok) {
         const data = await res.json();
         setSettings(data);
@@ -66,7 +66,7 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
 
   const fetchOllamaStatus = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/settings/ollama-status`);
+      const res = await apiFetch("/api/settings/ollama-status");
       if (res.ok) {
         const data = await res.json();
         setOllamaStatus(data);
@@ -78,7 +78,7 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
 
   const fetchProfile = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/settings/profile`);
+      const res = await apiFetch("/api/settings/profile");
       if (res.ok) {
         const data = await res.json();
         setProfileName(data.name || "");
@@ -93,7 +93,7 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
     setSavingProfile(true);
     setProfileSaved(false);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/settings/profile`, {
+      const res = await apiFetch("/api/settings/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: profileName }),
@@ -125,7 +125,7 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
         updates.openai_api_key = apiKey;
       }
 
-      const res = await fetch(`${API_BASE_URL}/api/settings`, {
+      const res = await apiFetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),

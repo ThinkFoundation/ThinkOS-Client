@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from "react";
-import { API_BASE_URL } from "@/constants";
+import { apiFetch } from "@/lib/api";
 import type { Conversation, ChatMessage, ConversationDetail, SourceMemory } from "@/types/chat";
 
 interface ConversationContextType {
@@ -28,7 +28,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   const loadConversation = useCallback(async (conversationId: number) => {
     setIsLoadingMessages(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/conversations/${conversationId}`);
+      const res = await apiFetch(`/api/conversations/${conversationId}`);
       if (res.ok) {
         const data: ConversationDetail = await res.json();
         setMessages(

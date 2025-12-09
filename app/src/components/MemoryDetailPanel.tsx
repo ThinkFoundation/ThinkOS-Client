@@ -19,7 +19,7 @@ import {
   Network,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { API_BASE_URL } from "../constants";
+import { apiFetch } from "@/lib/api";
 import { useMemoryEvents } from "../hooks/useMemoryEvents";
 import { useConversation } from "../contexts/ConversationContext";
 
@@ -152,7 +152,7 @@ export function MemoryDetailPanel({
   const fetchMemory = async (id: number) => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/memories/${id}`);
+      const res = await apiFetch(`/api/memories/${id}`);
       if (res.ok) {
         const data = await res.json();
         setMemory(data);
@@ -171,7 +171,7 @@ export function MemoryDetailPanel({
     setIsSaving(true);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/memories/${memory.id}`, {
+      const res = await apiFetch(`/api/memories/${memory.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -203,8 +203,8 @@ export function MemoryDetailPanel({
     setIsRegenerating(true);
 
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/memories/${memory.id}/regenerate-summary`,
+      const res = await apiFetch(
+        `/api/memories/${memory.id}/regenerate-summary`,
         { method: "POST" }
       );
 
@@ -237,8 +237,8 @@ export function MemoryDetailPanel({
     if (!memory) return;
 
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/memories/${memory.id}/tags/${tagId}`,
+      const res = await apiFetch(
+        `/api/memories/${memory.id}/tags/${tagId}`,
         { method: "DELETE" }
       );
 
@@ -267,8 +267,8 @@ export function MemoryDetailPanel({
     }
 
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/memories/${memory.id}/tags?tag_name=${encodeURIComponent(normalized)}`,
+      const res = await apiFetch(
+        `/api/memories/${memory.id}/tags?tag_name=${encodeURIComponent(normalized)}`,
         { method: "POST" }
       );
 

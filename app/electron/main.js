@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const { spawn, execSync } = require('child_process');
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
@@ -8,6 +9,10 @@ const { installNativeHost } = require('./install-native-host');
 let mainWindow;
 let pythonProcess;
 let backendReady = false;
+
+// Generate a secure random token for API authentication
+// This ensures only this Electron app can access the Python backend
+const APP_TOKEN = crypto.randomBytes(32).toString('hex');
 
 // Backend health check configuration
 const HEALTH_CHECK_URL = 'http://localhost:8765/health';
@@ -24,7 +29,9 @@ function waitForBackendReady() {
 
     const checkHealth = async () => {
       try {
-        const response = await fetch(HEALTH_CHECK_URL);
+        const response = await fetch(HEALTH_CHECK_URL, {
+          headers: { 'X-App-Token': APP_TOKEN }
+        });
         if (response.ok) {
           console.log('Backend is ready');
           resolve();
@@ -80,11 +87,11 @@ async function ensureOllamaRunning() {
 
 function getBackendPath() {
   if (app.isPackaged) {
-    // Production: bundled backend executable
+    // Production: bundled backend executable (inside onedir folder)
     const resourcesPath = process.resourcesPath;
     const platform = process.platform;
     const ext = platform === 'win32' ? '.exe' : '';
-    return path.join(resourcesPath, 'backend', `think-backend${ext}`);
+    return path.join(resourcesPath, 'backend', 'think-backend', `think-backend${ext}`);
   }
   return null; // Dev mode uses Python directly
 }
@@ -97,7 +104,7 @@ function startPythonBackend() {
     console.log('Starting bundled backend:', bundledBackend);
     pythonProcess = spawn(bundledBackend, [], {
       stdio: 'pipe',
-      env: { ...process.env }
+      env: { ...process.env, THINK_APP_TOKEN: APP_TOKEN }
     });
   } else {
     // Development: run with Python
@@ -106,7 +113,8 @@ function startPythonBackend() {
     pythonProcess = spawn('poetry', ['run', 'uvicorn', 'app.main:app', '--port', '8765'], {
       cwd: backendPath,
       stdio: 'pipe',
-      shell: true
+      shell: true,
+      env: { ...process.env, THINK_APP_TOKEN: APP_TOKEN }
     });
   }
 
@@ -148,7 +156,7 @@ function createWindow() {
   // Re-send backend-ready on page reload if backend is already running
   mainWindow.webContents.on('did-finish-load', () => {
     if (backendReady) {
-      mainWindow.webContents.send('backend-ready');
+      mainWindow.webContents.send('backend-ready', { token: APP_TOKEN });
     }
   });
 
@@ -187,7 +195,7 @@ app.whenReady().then(async () => {
     await waitForBackendReady();
     backendReady = true;
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('backend-ready');
+      mainWindow.webContents.send('backend-ready', { token: APP_TOKEN });
     }
   } catch (err) {
     console.error('Backend startup failed:', err);
@@ -217,7 +225,7 @@ app.on('activate', () => {
     // If backend is already ready, notify the new window once it's loaded
     if (backendReady && mainWindow) {
       mainWindow.webContents.once('did-finish-load', () => {
-        mainWindow.webContents.send('backend-ready');
+        mainWindow.webContents.send('backend-ready', { token: APP_TOKEN });
       });
     }
   }

@@ -20,9 +20,11 @@ declare global {
       removeOllamaDownloadProgress: () => void;
       removeModelPullProgress: () => void;
       // Backend status handlers
-      onBackendReady: (callback: () => void) => void;
+      onBackendReady: (callback: (data?: { token?: string }) => void) => void;
       onBackendError: (callback: (data: { message: string }) => void) => void;
       removeBackendListeners: () => void;
+      // App token for API authentication
+      getAppToken: () => string | null;
     };
   }
 }

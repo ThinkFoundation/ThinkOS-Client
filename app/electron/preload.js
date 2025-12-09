@@ -1,5 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Store the app token when received from main process
+let appToken = null;
+
 contextBridge.exposeInMainWorld('electronAPI', {
   checkOllama: () => ipcRenderer.invoke('check-ollama'),
   downloadOllama: () => ipcRenderer.invoke('download-ollama'),
@@ -18,7 +21,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   // Backend status handlers
   onBackendReady: (callback) => {
-    ipcRenderer.on('backend-ready', () => callback());
+    ipcRenderer.on('backend-ready', (_, data) => {
+      // Store the token when backend is ready
+      if (data && data.token) {
+        appToken = data.token;
+      }
+      callback(data);
+    });
   },
   onBackendError: (callback) => {
     ipcRenderer.on('backend-error', (_, data) => callback(data));
@@ -27,4 +36,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('backend-ready');
     ipcRenderer.removeAllListeners('backend-error');
   },
+  // Get the app token for API authentication
+  getAppToken: () => appToken,
 });

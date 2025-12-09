@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,6 +46,28 @@ async def require_unlock_middleware(request: Request, call_next):
             status_code=403,
             content={"detail": "Database not unlocked"}
         )
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def require_app_token_middleware(request: Request, call_next):
+    """Validate X-App-Token header on all requests.
+
+    This ensures only the Electron app can access the API.
+    In dev mode (no token set), validation is bypassed.
+    """
+    app_token = os.environ.get("THINK_APP_TOKEN", "")
+    if not app_token:
+        # Dev mode: no token configured, allow all requests
+        return await call_next(request)
+
+    request_token = request.headers.get("X-App-Token")
+    if request_token != app_token:
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Unauthorized: Invalid or missing app token"}
+        )
+
     return await call_next(request)
 
 

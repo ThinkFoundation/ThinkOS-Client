@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { X, Globe, FileText, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { API_BASE_URL } from "../constants";
+import { apiFetch } from "@/lib/api";
 
 interface Tag {
   id: number;
@@ -125,7 +125,7 @@ export function AddMemoryDialog({
         tags: selectedTags.length > 0 ? selectedTags : null,
       };
 
-      const res = await fetch(`${API_BASE_URL}/api/memories`, {
+      const res = await apiFetch("/api/memories", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

@@ -63,9 +63,8 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
-    [],
+    [],  # binaries/datas moved to COLLECT for onedir mode
+    exclude_binaries=True,  # Required for COLLECT to work
     name='think-backend',
     debug=False,
     bootloader_ignore_signals=False,
@@ -79,6 +78,16 @@ exe = EXE(
     target_arch=None,
     codesign_identity=os.environ.get('CODESIGN_IDENTITY'),
     entitlements_file='entitlements.plist' if sys.platform == 'darwin' else None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='think-backend',
 )
 
 # Native messaging stub for browser extension communication

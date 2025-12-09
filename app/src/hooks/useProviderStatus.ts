@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { API_BASE_URL } from "../constants";
+import { apiFetch } from "@/lib/api";
 
 export interface ProviderStatus {
   provider: "ollama" | "openai";
@@ -33,7 +33,7 @@ export function useProviderStatus({
     if (!enabled) return;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/settings/provider-status`);
+      const res = await apiFetch("/api/settings/provider-status");
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }

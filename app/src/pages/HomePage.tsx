@@ -3,8 +3,8 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Plus, Brain, MessageSquare } from "lucide-react";
-import { API_BASE_URL } from "../constants";
 import { useMemoryEvents } from "../hooks/useMemoryEvents";
+import { apiFetch } from "@/lib/api";
 import { ChatInput } from "@/components/ChatInput";
 import { ChatMessageList } from "@/components/ChatMessageList";
 import { ChatSidebar } from "@/components/ChatSidebar";
@@ -94,7 +94,7 @@ export default function HomePage({ userName }: HomePageProps) {
 
   const fetchRecentMemories = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/memories`);
+      const res = await apiFetch("/api/memories");
       if (res.ok) {
         const data = await res.json();
         setRecentMemories((data.memories || []).slice(0, 5));
@@ -131,7 +131,7 @@ export default function HomePage({ userName }: HomePageProps) {
     });
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/chat/stream`, {
+      const res = await apiFetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

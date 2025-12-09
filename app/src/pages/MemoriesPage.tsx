@@ -6,8 +6,8 @@ import { MemoryCard } from "@/components/MemoryCard";
 import { AddMemoryDialog } from "@/components/AddMemoryDialog";
 import { MemoryDetailPanel } from "@/components/MemoryDetailPanel";
 import { Plus, Search, Loader2, ChevronDown } from "lucide-react";
-import { API_BASE_URL } from "../constants";
 import { useMemoryEvents } from "../hooks/useMemoryEvents";
+import { apiFetch } from "@/lib/api";
 
 interface MemoryTag {
   id: number;
@@ -127,7 +127,7 @@ export default function MemoriesPage() {
   // Fetch all tags for autocomplete
   const fetchTags = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/tags`);
+      const res = await apiFetch("/api/tags");
       if (res.ok) {
         const data = await res.json();
         setAllTags(data.tags || []);
@@ -157,7 +157,7 @@ export default function MemoriesPage() {
       }
 
       try {
-        const res = await fetch(`${API_BASE_URL}/api/memories?${params}`);
+        const res = await apiFetch(`/api/memories?${params}`);
         if (res.ok) {
           const data = await res.json();
           const newMemories = data.memories || [];
@@ -243,7 +243,7 @@ export default function MemoriesPage() {
   // Delete memory
   const handleDelete = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/memories/${id}`, {
+      const res = await apiFetch(`/api/memories/${id}`, {
         method: "DELETE",
       });
       if (res.ok) {
@@ -258,8 +258,8 @@ export default function MemoriesPage() {
   // Remove tag from memory
   const handleRemoveTag = async (memoryId: number, tagId: number) => {
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/memories/${memoryId}/tags/${tagId}`,
+      const res = await apiFetch(
+        `/api/memories/${memoryId}/tags/${tagId}`,
         { method: "DELETE" }
       );
       if (res.ok) {
@@ -311,8 +311,8 @@ export default function MemoriesPage() {
 
     setIsSearching(true);
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/memories/search?q=${encodeURIComponent(query)}&limit=50`
+      const res = await apiFetch(
+        `/api/memories/search?q=${encodeURIComponent(query)}&limit=50`
       );
       if (res.ok) {
         const data = await res.json();

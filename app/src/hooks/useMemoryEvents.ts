@@ -1,5 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
+import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { API_BASE_URL } from "../constants";
+import { getAppToken } from "@/lib/api";
 
 export type MemoryEventType =
   | "connected"
@@ -24,7 +26,7 @@ interface UseMemoryEventsOptions {
   onConversationUpdated?: (conversationId: number, data: unknown) => void;
   onConversationDeleted?: (conversationId: number) => void;
   onConnected?: () => void;
-  onError?: (error: Event) => void;
+  onError?: (error: unknown) => void;
   enabled?: boolean;
 }
 
@@ -39,73 +41,84 @@ export function useMemoryEvents({
   onError,
   enabled = true,
 }: UseMemoryEventsOptions) {
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
 
   const connect = useCallback(() => {
     if (!enabled) return;
 
-    // Close existing connection
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
+    // Abort existing connection
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
 
-    const eventSource = new EventSource(`${API_BASE_URL}/api/memories/events`);
-    eventSourceRef.current = eventSource;
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
-    eventSource.onmessage = (event) => {
-      try {
-        const data: MemoryEventData = JSON.parse(event.data);
+    const token = getAppToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers["X-App-Token"] = token;
+    }
 
-        switch (data.type) {
-          case "connected":
-            onConnected?.();
-            break;
-          case "memory_created":
-            if (data.memory_id !== undefined) {
-              onMemoryCreated?.(data.memory_id, data.data);
-            }
-            break;
-          case "memory_updated":
-            if (data.memory_id !== undefined) {
-              onMemoryUpdated?.(data.memory_id, data.data);
-            }
-            break;
-          case "memory_deleted":
-            if (data.memory_id !== undefined) {
-              onMemoryDeleted?.(data.memory_id);
-            }
-            break;
-          case "conversation_created":
-            if (data.memory_id !== undefined) {
-              onConversationCreated?.(data.memory_id, data.data);
-            }
-            break;
-          case "conversation_updated":
-            if (data.memory_id !== undefined) {
-              onConversationUpdated?.(data.memory_id, data.data);
-            }
-            break;
-          case "conversation_deleted":
-            if (data.memory_id !== undefined) {
-              onConversationDeleted?.(data.memory_id);
-            }
-            break;
+    fetchEventSource(`${API_BASE_URL}/api/memories/events`, {
+      signal: abortController.signal,
+      headers,
+      onmessage(event) {
+        try {
+          const data: MemoryEventData = JSON.parse(event.data);
+
+          switch (data.type) {
+            case "connected":
+              onConnected?.();
+              break;
+            case "memory_created":
+              if (data.memory_id !== undefined) {
+                onMemoryCreated?.(data.memory_id, data.data);
+              }
+              break;
+            case "memory_updated":
+              if (data.memory_id !== undefined) {
+                onMemoryUpdated?.(data.memory_id, data.data);
+              }
+              break;
+            case "memory_deleted":
+              if (data.memory_id !== undefined) {
+                onMemoryDeleted?.(data.memory_id);
+              }
+              break;
+            case "conversation_created":
+              if (data.memory_id !== undefined) {
+                onConversationCreated?.(data.memory_id, data.data);
+              }
+              break;
+            case "conversation_updated":
+              if (data.memory_id !== undefined) {
+                onConversationUpdated?.(data.memory_id, data.data);
+              }
+              break;
+            case "conversation_deleted":
+              if (data.memory_id !== undefined) {
+                onConversationDeleted?.(data.memory_id);
+              }
+              break;
+          }
+        } catch (err) {
+          console.error("Failed to parse SSE event:", err);
         }
-      } catch (err) {
-        console.error("Failed to parse SSE event:", err);
-      }
-    };
-
-    eventSource.onerror = (error) => {
-      onError?.(error);
-      eventSource.close();
-
-      // Reconnect after delay
-      reconnectTimeoutRef.current = window.setTimeout(() => {
-        connect();
-      }, 3000);
-    };
+      },
+      onerror(error) {
+        onError?.(error);
+        // Reconnect after delay (fetchEventSource handles this automatically,
+        // but we add a delay to prevent rapid reconnection attempts)
+        reconnectTimeoutRef.current = window.setTimeout(() => {
+          connect();
+        }, 3000);
+        // Throw to stop the current connection
+        throw error;
+      },
+      openWhenHidden: true, // Keep connection open when tab is hidden
+    });
   }, [
     enabled,
     onMemoryCreated,
@@ -122,8 +135,8 @@ export function useMemoryEvents({
     connect();
 
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);

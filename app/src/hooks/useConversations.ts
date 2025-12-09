@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { API_BASE_URL } from "../constants";
 import { useMemoryEvents } from "./useMemoryEvents";
+import { apiFetch } from "@/lib/api";
 import type { Conversation } from "@/types/chat";
 
 export function useConversations() {
@@ -9,7 +9,7 @@ export function useConversations() {
 
   const fetchConversations = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/conversations`);
+      const res = await apiFetch("/api/conversations");
       if (res.ok) {
         const data = await res.json();
         setConversations(data.conversations || []);
@@ -53,7 +53,7 @@ export function useConversations() {
 
   const deleteConversation = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/conversations/${id}`, {
+      const res = await apiFetch(`/api/conversations/${id}`, {
         method: "DELETE",
       });
       if (res.ok) {

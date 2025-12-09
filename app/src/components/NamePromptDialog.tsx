@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { API_BASE_URL } from "../constants";
+import { apiFetch } from "@/lib/api";
 
 interface NamePromptDialogProps {
   open: boolean;
@@ -57,7 +57,7 @@ export function NamePromptDialog({
     setSaving(true);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/settings/profile`, {
+      const res = await apiFetch("/api/settings/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim() }),
