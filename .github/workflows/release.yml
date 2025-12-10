@@ -85,7 +85,10 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: backend
-        run: poetry install
+        run: |
+          export CFLAGS="-I$(brew --prefix sqlcipher)/include"
+          export LDFLAGS="-L$(brew --prefix sqlcipher)/lib"
+          poetry install
 
       - name: Import Code Signing Certificate
         env:
