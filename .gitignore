@@ -32,6 +32,7 @@ out/
 *.db
 
 build/
+!app/build/
 release/
 
 # Extension private key (do not commit!)
