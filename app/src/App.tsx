@@ -4,6 +4,7 @@ import SetupWizard from "./SetupWizard";
 import LockScreen from "./LockScreen";
 import MainLayout from "./layouts/MainLayout";
 import HomePage from "./pages/HomePage";
+import ChatPage from "./pages/ChatPage";
 import MemoriesPage from "./pages/MemoriesPage";
 import SettingsPage from "./pages/SettingsPage";
 import { NamePromptDialog } from "./components/NamePromptDialog";
@@ -216,6 +217,7 @@ function App() {
           <Route element={<MainLayout />}>
             <Route path="/" element={<HomePage userName={userName} />} />
             <Route path="/memories" element={<MemoriesPage />} />
+            <Route path="/chat" element={<ChatPage />} />
             <Route
               path="/settings"
               element={<SettingsPage onNameChange={setUserName} />}
