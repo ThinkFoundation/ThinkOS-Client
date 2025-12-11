@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Send, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useRef, useEffect } from "react";
 
 interface ChatInputProps {
   value: string;
@@ -19,12 +20,21 @@ export function ChatInput({
   placeholder = "Type your message...",
   className,
 }: ChatInputProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       onSubmit();
     }
   };
+
+  // Auto-focus input after message submission (when loading completes)
+  useEffect(() => {
+    if (!isLoading && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isLoading]);
 
   return (
     <div
@@ -39,6 +49,7 @@ export function ChatInput({
       )}
     >
       <input
+        ref={inputRef}
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}

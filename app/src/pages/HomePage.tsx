@@ -1,17 +1,13 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Plus, Brain, MessageSquare } from "lucide-react";
 import { useMemoryEvents } from "../hooks/useMemoryEvents";
 import { apiFetch } from "@/lib/api";
 import { ChatInput } from "@/components/ChatInput";
-import { ChatMessageList } from "@/components/ChatMessageList";
-import { ChatSidebar } from "@/components/ChatSidebar";
-import { ChatSourcesPanel } from "@/components/ChatSourcesPanel";
 import { useConversation } from "@/contexts/ConversationContext";
 import { useConversations } from "@/hooks/useConversations";
-import type { ChatMode, ChatMessage } from "@/types/chat";
 
 interface Memory {
   id: number;
@@ -40,37 +36,18 @@ function getGreeting(name?: string | null): string {
 export default function HomePage({ userName }: HomePageProps) {
   const [message, setMessage] = useState("");
   const [recentMemories, setRecentMemories] = useState<Memory[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
 
   const {
-    currentConversationId,
-    messages,
-    allSources,
-    isLoadingMessages,
-    pendingMessage,
-    setCurrentConversationId,
-    addMessage,
-    updateMessage,
     selectConversation,
     setPendingMessage,
   } = useConversation();
 
   const { conversations } = useConversations();
 
-  // Determine chat mode based on whether we have messages or a conversation
-  const chatMode: ChatMode = messages.length > 0 || currentConversationId ? "active" : "idle";
-
   useEffect(() => {
     fetchRecentMemories();
   }, []);
-
-  // Consume pending message from context (e.g., from "Add to Chat" in memory panel)
-  useEffect(() => {
-    if (pendingMessage) {
-      setMessage(pendingMessage);
-      setPendingMessage(null);
-    }
-  }, [pendingMessage, setPendingMessage]);
 
   // Real-time updates via SSE
   useMemoryEvents({
@@ -104,145 +81,17 @@ export default function HomePage({ userName }: HomePageProps) {
     }
   };
 
-  const handleChat = async () => {
+  const handleChat = () => {
     if (!message.trim()) return;
 
-    // Add user message optimistically
-    const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: message.trim(),
-      timestamp: new Date(),
-    };
-
-    const assistantMessageId = crypto.randomUUID();
-
-    addMessage(userMessage);
-    setMessage("");
-    setIsLoading(true);
-
-    // Add empty assistant message for streaming
-    addMessage({
-      id: assistantMessageId,
-      role: "assistant",
-      content: "",
-      timestamp: new Date(),
-      isStreaming: true,
-    });
-
-    try {
-      const res = await apiFetch("/api/chat/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: userMessage.content,
-          conversation_id: currentConversationId,
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error("Failed to connect");
-      }
-
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No reader available");
-
-      const decoder = new TextDecoder();
-      let content = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
-
-              if (data.type === "meta") {
-                // Update conversation ID and sources
-                if (data.conversation_id && !currentConversationId) {
-                  setCurrentConversationId(data.conversation_id);
-                }
-                updateMessage(assistantMessageId, {
-                  sources: data.sources || [],
-                  searched: data.searched || false,
-                });
-              } else if (data.type === "token") {
-                content += data.content;
-                updateMessage(assistantMessageId, { content });
-              } else if (data.type === "done") {
-                updateMessage(assistantMessageId, { isStreaming: false });
-              } else if (data.type === "error") {
-                updateMessage(assistantMessageId, {
-                  content: data.message,
-                  error: true,
-                  isStreaming: false,
-                });
-              }
-            } catch {
-              // Ignore parse errors for incomplete chunks
-            }
-          }
-        }
-      }
-    } catch (err) {
-      updateMessage(assistantMessageId, {
-        content: "Failed to connect to the server",
-        error: true,
-        isStreaming: false,
-      });
-      console.error("Chat failed:", err);
-    } finally {
-      setIsLoading(false);
-    }
+    // Navigate to chat page with the message
+    setPendingMessage(message);
+    navigate("/chat");
   };
 
   // Get recent chats (first 5)
   const recentChats = conversations.slice(0, 5);
 
-  // Active chat mode layout
-  if (chatMode === "active") {
-    return (
-      <div className="flex h-full">
-        {/* Chat history sidebar */}
-        <ChatSidebar />
-
-        {/* Chat content */}
-        <div className="flex-1 flex flex-col">
-          {/* Messages area */}
-          {isLoadingMessages ? (
-            <div className="flex-1 flex items-center justify-center">
-              <p className="text-muted-foreground">Loading messages...</p>
-            </div>
-          ) : (
-            <ChatMessageList messages={messages} isLoading={isLoading} />
-          )}
-
-          {/* Sources panel */}
-          <ChatSourcesPanel sources={allSources} />
-
-          {/* Floating input at bottom */}
-          <div className="flex-none p-4">
-            <div className="max-w-2xl mx-auto">
-              <ChatInput
-                value={message}
-                onChange={setMessage}
-                onSubmit={handleChat}
-                isLoading={isLoading}
-                placeholder="Type your message..."
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Idle mode layout (original design with Recent Chats card)
   return (
     <div className="flex flex-col items-center justify-center min-h-full p-8">
       <div className="w-full max-w-3xl">
@@ -255,7 +104,7 @@ export default function HomePage({ userName }: HomePageProps) {
             value={message}
             onChange={setMessage}
             onSubmit={handleChat}
-            isLoading={isLoading}
+            isLoading={false}
             placeholder="Search for or ask anything..."
           />
         </div>
@@ -314,7 +163,10 @@ export default function HomePage({ userName }: HomePageProps) {
                   {recentChats.map((chat) => (
                     <li
                       key={chat.id}
-                      onClick={() => selectConversation(chat)}
+                      onClick={() => {
+                        selectConversation(chat);
+                        navigate("/chat");
+                      }}
                       className="text-sm truncate text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
                     >
                       {chat.title || "New conversation"}
