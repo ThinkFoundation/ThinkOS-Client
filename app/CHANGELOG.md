@@ -1,5 +1,11 @@
 # think-app
 
+## 0.1.2
+
+### Patch Changes
+
+- 96a56b5: Fix Python.framework signing in CI builds by preserving CODESIGN_IDENTITY environment variable
+
 ## 0.1.1
 
 ### Patch Changes
