@@ -6,7 +6,8 @@ on:
       - main
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
-
+env:
+  GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
 permissions:
   contents: write
   pull-requests: write
@@ -42,7 +43,7 @@ jobs:
           title: 'chore(release): version packages'
           commit: 'chore(release): version packages'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
 
       - name: Create Release Tag
         if: steps.changesets.outputs.hasChangesets == 'false'
