@@ -27,7 +27,7 @@
         "to": "backend/think-backend"
       },
       {
-        "from": "../backend/dist/think-native-stub",
+        "from": "../backend/native_host/think-native-stub",
         "to": "backend/native_host/think-native-stub"
       }
     ],
