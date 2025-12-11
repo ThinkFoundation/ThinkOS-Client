@@ -1,5 +1,59 @@
 # think-app
 
+## 0.1.7
+
+### Patch Changes
+
+- 4646200: Fix "Python.framework is damaged" error on macOS:
+
+  - Rewrite native messaging stub in pure C (no Python dependency)
+  - Disable UPX compression (breaks code signing on macOS/Apple Silicon)
+  - Add allow-jit entitlement required by Python runtime
+
+  Root cause: Any Python on macOS (Homebrew, system, etc.) loads Python.framework
+  which triggers Gatekeeper errors when invoked from Chrome native messaging.
+  Solution: Eliminate Python entirely from the native stub.
+
+## 0.1.6
+
+### Patch Changes
+
+- e47fcaa: Fix "Python.framework is damaged" error on macOS:
+
+  - Rewrite native messaging stub in pure C (no Python dependency)
+  - Disable UPX compression (breaks code signing on macOS/Apple Silicon)
+  - Add allow-jit entitlement required by Python runtime
+
+  Root cause: Any Python on macOS (Homebrew, system, etc.) loads Python.framework
+  which triggers Gatekeeper errors when invoked from Chrome native messaging.
+  Solution: Eliminate Python entirely from the native stub.
+
+## 0.1.5
+
+### Patch Changes
+
+- dd084da: Fix "Python.framework is damaged" error on macOS:
+
+  - Rewrite native messaging stub in pure C (no Python dependency)
+  - Disable UPX compression (breaks code signing on macOS/Apple Silicon)
+  - Add allow-jit entitlement required by Python runtime
+
+  Root cause: Any Python on macOS (Homebrew, system, etc.) loads Python.framework
+  which triggers Gatekeeper errors when invoked from Chrome native messaging.
+  Solution: Eliminate Python entirely from the native stub.
+
+## 0.1.4
+
+### Patch Changes
+
+- 452a836: Fix "Python.framework is damaged" error on macOS:
+
+  - Use PyInstaller-bundled native stub instead of C stub that calls system Python
+  - Disable UPX compression (breaks code signing on macOS/Apple Silicon)
+  - Add allow-jit entitlement required by Python runtime
+
+  Root cause: The C stub was calling Homebrew's Python which has an unsigned Python.framework.
+
 ## 0.1.3
 
 ### Patch Changes
