@@ -69,7 +69,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False if sys.platform == 'darwin' else True,  # UPX breaks code signing on macOS
     upx_exclude=[],
     runtime_tmpdir=None,
     console=True,  # Set to False for production
@@ -85,7 +85,7 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False if sys.platform == 'darwin' else True,  # UPX breaks code signing on macOS
     upx_exclude=[],
     name='think-backend',
 )
@@ -118,7 +118,7 @@ stub_exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False if sys.platform == 'darwin' else True,  # UPX breaks code signing on macOS
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,  # No console window for native host
