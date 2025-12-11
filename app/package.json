@@ -1,6 +1,6 @@
 {
   "name": "think-app",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -29,7 +29,9 @@
       {
         "from": "../backend/native_host",
         "to": "backend/native_host",
-        "filter": ["think-native-stub"]
+        "filter": [
+          "think-native-stub"
+        ]
       }
     ],
     "mac": {
