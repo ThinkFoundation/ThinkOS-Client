@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { Button } from '@/components/ui/button';
 import { saveMemory, updateMemory, type SaveMemoryResult } from './native-client';
 import { useSystemTheme } from '@/hooks/useSystemTheme';
+import { Bookmark, MessageCircle, Sparkles, RefreshCw, X } from 'lucide-react';
 import './index.css';
 
 interface DuplicateInfo {
@@ -104,38 +105,106 @@ function Popup() {
     return (
       <div className="p-4 w-full bg-background min-h-[200px]">
         <PopupHeader />
-        <div className="bg-secondary/30 p-3 rounded-md mb-4 border border-border text-center">
+        <div className="bg-white/70 dark:bg-white/5 backdrop-blur-xl p-3.5 rounded-lg mb-4 border border-white/60 dark:border-white/10 shadow-sm shadow-black/5 dark:shadow-black/20 text-center">
+           <Bookmark className="w-5 h-5 mx-auto mb-2 text-primary" />
            <p className="text-sm font-medium mb-1">Page already saved</p>
            <p className="text-xs text-muted-foreground">Saved on {date}</p>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Button className="w-full" onClick={updateExisting} disabled={saving}>
-            {saving ? 'Updating...' : 'Update'}
+        <div className="grid grid-cols-2 gap-2.5">
+          <Button className="w-full h-10" onClick={updateExisting} disabled={saving}>
+            <div className="flex items-center gap-2">
+              {saving ? (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              <span>{saving ? 'Updating...' : 'Update'}</span>
+            </div>
           </Button>
-          <Button className="w-full" variant="outline" onClick={cancelUpdate} disabled={saving}>
-            Cancel
+          <Button className="w-full h-10" variant="outline" onClick={cancelUpdate} disabled={saving}>
+            <div className="flex items-center gap-2">
+              <X className="w-4 h-4" />
+              <span>Cancel</span>
+            </div>
           </Button>
         </div>
       </div>
     );
   }
 
+  const openChat = async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab.id || !tab.url) {
+        setStatus('Cannot chat on this page');
+        return;
+      }
+
+      // Check if it's a restricted page
+      if (tab.url.startsWith('chrome://') || tab.url.startsWith('about:') || tab.url.startsWith('chrome-extension://')) {
+        setStatus('Cannot chat on browser pages');
+        return;
+      }
+
+      try {
+        // Try to send message to existing content script
+        await chrome.tabs.sendMessage(tab.id, { action: 'openSidebar' });
+        window.close();
+      } catch {
+        // Content script not loaded, inject it first
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js'],
+        });
+        // Wait a bit for script to initialize
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await chrome.tabs.sendMessage(tab.id, { action: 'openSidebar' });
+        window.close();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      if (message.includes('Cannot access')) {
+        setStatus('Cannot chat on this page');
+      } else {
+        setStatus('Could not open chat');
+      }
+    }
+  };
+
   return (
     <div className="p-4 w-full bg-background min-h-[200px]">
       <PopupHeader />
-      <div className="space-y-4">
-          <Button className="w-full h-10 font-medium shadow-sm hover:shadow-md transition-all" onClick={savePage} disabled={saving}>
+
+      {/* Intro section */}
+      <div className="flex items-center gap-2 mb-4 p-2.5 rounded-lg bg-white/70 dark:bg-white/5 backdrop-blur-xl border border-white/60 dark:border-white/10 shadow-sm shadow-black/5 dark:shadow-black/20">
+        <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Save pages to your knowledge base or chat with AI about the content.
+        </p>
+      </div>
+
+      <div className="space-y-2.5">
+          <Button className="w-full h-11 font-medium shadow-sm hover:shadow-md transition-all justify-start px-4" onClick={savePage} disabled={saving}>
             {saving ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                 Saving...
+                 <span>Saving...</span>
               </div>
             ) : (
-              'Save This Page'
+              <div className="flex items-center gap-3">
+                <Bookmark className="w-4 h-4" />
+                <span>Save to Think</span>
+              </div>
             )}
           </Button>
+          <Button className="w-full h-11 font-medium shadow-sm hover:shadow-md transition-all justify-start px-4" variant="outline" onClick={openChat}>
+            <div className="flex items-center gap-3">
+              <MessageCircle className="w-4 h-4" />
+              <span>Chat with Page</span>
+            </div>
+          </Button>
           {status && (
-            <div className={`text-sm p-2 rounded-md text-center animate-in fade-in slide-in-from-bottom-2 ${status.includes('Error') || status.includes('Please') ? 'bg-destructive/10 text-destructive' : 'bg-green-500/10 text-green-600'}`}>
+            <div className={`text-sm p-2.5 rounded-md text-center animate-in fade-in slide-in-from-bottom-2 ${status.includes('Error') || status.includes('Please') ? 'bg-destructive/10 text-destructive' : 'bg-green-500/10 text-green-600 dark:text-green-400'}`}>
                {status}
             </div>
           )}

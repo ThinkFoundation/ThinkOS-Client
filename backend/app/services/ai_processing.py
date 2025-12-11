@@ -176,8 +176,8 @@ async def process_memory_async(memory_id: int) -> None:
             generate_tags(content, title, existing_tag_names),
         ]
 
-        # Generate title only for web memories (extension-sourced)
-        should_generate_title = memory_type == "web" and original_title
+        # Generate title for memories that have original_title (web pages and chat summaries)
+        should_generate_title = bool(original_title)
         if should_generate_title:
             tasks.append(generate_title(content, original_title))
 

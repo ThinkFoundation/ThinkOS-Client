@@ -60,67 +60,24 @@ function getManifestDirectories() {
 }
 
 /**
- * Get the absolute path to python3.
- * Chrome launches native hosts with minimal PATH, so we need absolute paths.
- */
-function getPythonPath() {
-  const { execSync } = require('child_process');
-
-  try {
-    // Try pyenv first (common on macOS)
-    const pyenvPath = execSync('pyenv which python3 2>/dev/null', { encoding: 'utf8' }).trim();
-    if (pyenvPath && fs.existsSync(pyenvPath)) {
-      return pyenvPath;
-    }
-  } catch {
-    // pyenv not available
-  }
-
-  try {
-    // Fall back to which python3
-    const whichPath = execSync('which python3', { encoding: 'utf8' }).trim();
-    // If it's a shim, try to resolve the actual binary
-    if (whichPath.includes('shims')) {
-      const realPath = execSync('python3 -c "import sys; print(sys.executable)"', { encoding: 'utf8' }).trim();
-      if (realPath && fs.existsSync(realPath)) {
-        return realPath;
-      }
-    }
-    return whichPath;
-  } catch {
-    // Fallback to generic python3
-    return 'python3';
-  }
-}
-
-/**
  * Get the path to the native host stub executable.
- * Uses thin C binary (no bundled Python) to avoid Gatekeeper warnings.
+ * Uses pure C binary (no Python dependency) to avoid Gatekeeper warnings.
  */
 function getStubPath(resourcesPath, isDev = false) {
   const platform = process.platform;
   const ext = platform === 'win32' ? '.exe' : '';
 
-  // Both dev and production: use thin native binary from native_host/
+  // Both dev and production: use pure C native binary from native_host/
   const binaryPath = path.join(resourcesPath, 'backend', 'native_host', `think-native-stub${ext}`);
 
   if (fs.existsSync(binaryPath)) {
-    console.log(`[Native Host] Using thin binary: ${binaryPath}`);
+    console.log(`[Native Host] Using native binary: ${binaryPath}`);
     return binaryPath;
   }
 
-  // Fallback: use Python script directly (requires macOS security approval)
-  console.log('[Native Host] Binary not found, falling back to Python script');
-  const stubPy = path.join(resourcesPath, 'backend', 'native_host', 'stub.py');
-
-  // Ensure stub.py is executable
-  try {
-    fs.chmodSync(stubPy, 0o755);
-  } catch (e) {
-    console.error('[Native Host] Failed to make stub.py executable:', e.message);
-  }
-
-  return stubPy;
+  console.error(`[Native Host] Binary not found at ${binaryPath}`);
+  console.error('[Native Host] Run "pnpm build:stub" to compile the native stub');
+  return null;
 }
 
 /**
@@ -254,13 +211,10 @@ function installNativeHost(resourcesPath, extensionIds = CHROME_EXTENSION_IDS, i
 
   const stubPath = getStubPath(resourcesPath, isDev);
 
-  // Check if stub (or source script in dev mode) exists
-  const checkPath = isDev
-    ? path.join(resourcesPath, 'backend', 'native_host', 'stub.py')
-    : stubPath;
-
-  if (!fs.existsSync(checkPath)) {
-    console.warn(`[Native Host] Stub not found at ${checkPath}, skipping installation`);
+  // Check if stub binary exists
+  if (!stubPath || !fs.existsSync(stubPath)) {
+    console.warn('[Native Host] Stub binary not found, skipping installation');
+    console.warn('[Native Host] Run "pnpm build:stub" to compile the native stub');
     return false;
   }
 
