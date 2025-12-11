@@ -41,6 +41,10 @@ PUBLIC_PATHS = {"/health", "/api/auth/status", "/api/auth/setup", "/api/auth/unl
 @app.middleware("http")
 async def require_unlock_middleware(request: Request, call_next):
     """Block requests to protected endpoints if DB is not unlocked."""
+    # Allow CORS preflight requests (OPTIONS) to pass through
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
     if request.url.path not in PUBLIC_PATHS and not is_db_initialized():
         return JSONResponse(
             status_code=403,
@@ -56,6 +60,10 @@ async def require_app_token_middleware(request: Request, call_next):
     This ensures only the Electron app can access the API.
     In dev mode (no token set), validation is bypassed.
     """
+    # Allow CORS preflight requests (OPTIONS) to pass through
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
     app_token = os.environ.get("THINK_APP_TOKEN", "")
     if not app_token:
         # Dev mode: no token configured, allow all requests

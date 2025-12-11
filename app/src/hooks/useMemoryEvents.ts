@@ -66,6 +66,7 @@ export function useMemoryEvents({
       headers,
       onmessage(event) {
         try {
+          if (!event.data) return; // Skip empty events
           const data: MemoryEventData = JSON.parse(event.data);
 
           switch (data.type) {

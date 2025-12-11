@@ -52,6 +52,15 @@ export default {
         "medium": "0 4px 12px rgba(0, 0, 0, 0.1)",
         "large": "0 10px 40px rgba(0, 0, 0, 0.2)",
       },
+      keyframes: {
+        "slide-up": {
+          "0%": { opacity: "0", transform: "translateY(10px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+      },
+      animation: {
+        "slide-up": "slide-up 200ms ease-out",
+      },
     },
   },
   plugins: [],

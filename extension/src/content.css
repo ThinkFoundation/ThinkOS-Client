@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CSS Variables for Shadow DOM - use :host instead of :root */
+:host {
+  /* Backgrounds */
+  --background: 40 100% 99%;
+  --card: 60 1% 99.8%;
+  --popover: 60 1% 99.8%;
+
+  /* Text */
+  --foreground: 222.2 84% 5%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+
+  /* Brand Primary */
+  --primary: 192 61% 59%;
+  --primary-foreground: 210 40% 98%;
+  --ring: 192 61% 59%;
+
+  /* UI Elements */
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 40 100% 99%;
+
+  /* Status Colors */
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+
+  --radius: 0.5rem;
+}
+
+/* Dark mode for Shadow DOM */
+:host(.dark) {
+  --background: 0 0% 5%;
+  --foreground: 48 86% 97%;
+  --card: 230 30% 12%;
+  --card-foreground: 48 86% 97%;
+  --popover: 230 30% 12%;
+  --popover-foreground: 48 86% 97%;
+  --primary: 192 61% 59%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 240 9% 15%;
+  --secondary-foreground: 48 86% 97%;
+  --muted: 230 55% 8%;
+  --muted-foreground: 235 9% 49%;
+  --accent: 230 22% 12%;
+  --accent-foreground: 48 86% 97%;
+  --border: 235 26% 16%;
+  --input: 235 26% 16%;
+  --ring: 192 61% 59%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+}
+
+/* Base styles */
+* {
+  border-color: hsl(var(--border));
+  box-sizing: border-box;
+}
+
+/* Sidebar positioning */
+#think-sidebar-wrapper {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  width: 350px !important;
+  height: 100vh !important;
+  z-index: 2147483647 !important;
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.15);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background-color: hsl(var(--background));
+  background-image:
+    radial-gradient(at 0% 0%, hsl(192 61% 59% / 0.1) 0%, transparent 50%),
+    radial-gradient(at 100% 100%, hsl(192 61% 59% / 0.1) 0%, transparent 50%);
+}
+
+#think-sidebar-wrapper.hidden {
+  display: none !important;
+}
+
+/* Hide scrollbar but keep scroll functionality */
+#think-sidebar-wrapper ::-webkit-scrollbar {
+  display: none;
+}
+
+#think-sidebar-wrapper * {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}

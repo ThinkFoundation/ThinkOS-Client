@@ -204,3 +204,75 @@ export async function updateMemory(
 ): Promise<MemoryResult> {
   return nativeClient.request<MemoryResult>("memories.update", { id, ...data });
 }
+
+/**
+ * Chat message data for page chat.
+ */
+export interface ChatMessageData {
+  message: string;
+  page_content?: string;
+  page_url?: string;
+  page_title?: string;
+  history?: Array<{ role: "user" | "assistant"; content: string }>;
+}
+
+/**
+ * Source memory reference returned with chat responses.
+ */
+export interface SourceMemory {
+  id: number;
+  title: string;
+  url?: string;
+}
+
+/**
+ * Chat response from the backend.
+ */
+export interface ChatResponse {
+  response: string;
+  sources?: SourceMemory[];
+}
+
+/**
+ * Send a chat message with page context via native messaging.
+ */
+export async function sendChatMessage(data: ChatMessageData): Promise<ChatResponse> {
+  return nativeClient.request<ChatResponse>("chat.message", { ...data });
+}
+
+/**
+ * Save conversation to app data.
+ */
+export interface SaveConversationData {
+  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  page_title?: string;
+  page_url?: string;
+}
+
+export interface SaveConversationResult {
+  conversation_id: number;
+  title: string;
+}
+
+export async function saveConversation(data: SaveConversationData): Promise<SaveConversationResult> {
+  return nativeClient.request<SaveConversationResult>("conversations.save", { ...data });
+}
+
+/**
+ * Generate AI summary of chat and save as memory.
+ */
+export interface SummarizeChatData {
+  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  page_title?: string;
+  page_url?: string;
+}
+
+export interface SummarizeChatResult {
+  memory_id: number;
+  title: string;
+  summary: string;
+}
+
+export async function summarizeChat(data: SummarizeChatData): Promise<SummarizeChatResult> {
+  return nativeClient.request<SummarizeChatResult>("chat.summarize", { ...data });
+}

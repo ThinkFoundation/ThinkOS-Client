@@ -8,9 +8,13 @@ import sys
 from pathlib import Path
 
 from .db import get_memory_by_url, create_memory, update_memory, get_memory, is_db_initialized
+from .db.crud import create_conversation, add_message
+from .db.search import search_similar_memories
 from .schemas import MemoryCreate, format_memory_for_embedding
 from .services.embeddings import get_embedding
-from .services.ai_processing import process_memory_async
+from .services.ai_processing import process_memory_async, process_conversation_title_async
+from .services.ai import chat
+from .services.query_processing import preprocess_query, extract_keywords
 from .events import event_manager, MemoryEvent, EventType
 
 logger = logging.getLogger(__name__)
@@ -123,6 +127,12 @@ class NativeMessagingServer:
                 result = await self._create_memory(params)
             elif method == "memories.update":
                 result = await self._update_memory(params)
+            elif method == "chat.message":
+                result = await self._chat_message(params)
+            elif method == "conversations.save":
+                result = await self._save_conversation(params)
+            elif method == "chat.summarize":
+                result = await self._summarize_chat(params)
             else:
                 return {
                     "id": request_id,
@@ -225,6 +235,179 @@ class NativeMessagingServer:
         )
 
         return result
+
+    async def _chat_message(self, params: dict) -> dict:
+        """Handle chat.message request - chat with current page + memories context."""
+        message = params.get("message", "")
+        page_content = params.get("page_content", "")
+        page_url = params.get("page_url", "")
+        page_title = params.get("page_title", "")
+        history = params.get("history", [])
+
+        if not message:
+            raise ValueError("Missing required parameter: message")
+
+        # Build context from current page and relevant memories
+        context_parts = []
+        sources = []
+
+        # Add current page context
+        if page_content:
+            # Truncate page content to reasonable size
+            truncated_content = page_content[:4000]
+            context_parts.append(f"Current page ({page_title or page_url}):\n{truncated_content}")
+
+        # Search for relevant memories based on the user's message
+        try:
+            processed_query = preprocess_query(message)
+            query_embedding = await get_embedding(processed_query)
+            keyword_query = extract_keywords(message)
+
+            memories = await search_similar_memories(
+                query_embedding=query_embedding,
+                limit=10,
+                keyword_query=keyword_query,
+            )
+
+            if memories:
+                # Filter by relevance (distance < 0.85) or FTS-only matches (distance=None)
+                relevant_memories = [
+                    m for m in memories
+                    if m.get("distance") is None or m.get("distance", 1.0) < 0.85
+                ]
+
+                # Build sources list for the response
+                sources = [
+                    {"id": m["id"], "title": m["title"], "url": m.get("url")}
+                    for m in relevant_memories
+                ]
+
+                if relevant_memories:
+                    memories_context = "\n\n".join([
+                        f"From saved memory '{m['title']}':\n{(m.get('summary') or m['content'][:500])}"
+                        for m in relevant_memories
+                    ])
+                    context_parts.append(f"Relevant saved memories:\n{memories_context}")
+        except Exception as e:
+            logger.warning(f"Memory search failed: {e}")
+
+        # Combine context
+        context = "\n\n---\n\n".join(context_parts) if context_parts else ""
+
+        # Get AI response
+        response = await chat(message, context=context, history=history)
+
+        return {"response": response, "sources": sources}
+
+    async def _save_conversation(self, params: dict) -> dict:
+        """Save a sidebar conversation to the app's conversation history."""
+        messages = params.get("messages", [])
+        page_title = params.get("page_title", "")
+        page_url = params.get("page_url", "")
+
+        if not messages:
+            raise ValueError("No messages to save")
+
+        # Create conversation with temporary title
+        temp_title = f"Chat: {page_title or page_url}"[:50]
+        conversation = await create_conversation(title=temp_title)
+        conversation_id = conversation["id"]
+
+        # Add all messages
+        for msg in messages:
+            await add_message(
+                conversation_id=conversation_id,
+                role=msg.get("role", "user"),
+                content=msg.get("content", ""),
+            )
+
+        # Generate better title in background
+        if messages:
+            first_user_msg = next((m["content"] for m in messages if m.get("role") == "user"), "")
+            if first_user_msg:
+                asyncio.create_task(process_conversation_title_async(conversation_id, first_user_msg))
+
+        return {"conversation_id": conversation_id, "title": temp_title}
+
+    async def _summarize_chat(self, params: dict) -> dict:
+        """Generate an AI summary of the chat and save it as a memory."""
+        messages = params.get("messages", [])
+        page_title = params.get("page_title", "")
+        page_url = params.get("page_url", "")
+
+        if not messages:
+            raise ValueError("No messages to summarize")
+
+        # Build conversation text for summarization
+        conversation_text = "\n\n".join([
+            f"{'User' if m.get('role') == 'user' else 'Assistant'}: {m.get('content', '')}"
+            for m in messages
+        ])
+
+        # Generate summary and title using AI in parallel
+        summary_prompt = f"""Summarize the key insights and information from this conversation about "{page_title or page_url}".
+Focus on the main topics discussed and any important facts or conclusions.
+
+Conversation:
+{conversation_text}
+
+Provide a concise summary (2-4 paragraphs):"""
+
+        title_prompt = f"""Generate a concise, descriptive title for this chat conversation.
+
+Page context: {page_title or page_url}
+Conversation:
+{conversation_text[:1500]}
+
+Requirements:
+- 5-10 words maximum
+- Capture the main topic discussed
+- Be informative and scannable
+
+Title:"""
+
+        # Run both AI calls in parallel
+        summary_task = chat(summary_prompt, context="", history=[])
+        title_task = chat(title_prompt, context="", history=[])
+        summary, generated_title = await asyncio.gather(summary_task, title_task)
+
+        # Clean up the generated title
+        title = generated_title.strip().strip('"')[:100] if generated_title else f"Chat: {page_title or 'Web Page'}"[:100]
+
+        content = f"## Summary of conversation about: {page_title or page_url}\n\n{summary}"
+        if page_url:
+            content += f"\n\n---\nSource: {page_url}"
+
+        # Generate embedding for the summary
+        embedding = None
+        try:
+            embedding = await get_embedding(format_memory_for_embedding(title, content))
+        except Exception as e:
+            logger.warning(f"Embedding generation failed: {e}")
+
+        result = await create_memory(
+            title=title,
+            content=content,
+            memory_type="note",
+            url=None,  # Don't link to URL since this is a derived note
+            embedding=embedding,
+            original_title=page_title or page_url,  # Store original context for regeneration
+        )
+
+        # Emit MEMORY_CREATED event so frontend updates immediately
+        full_memory = await get_memory(result["id"])
+        await event_manager.publish(
+            MemoryEvent(
+                type=EventType.MEMORY_CREATED,
+                memory_id=result["id"],
+                data=full_memory,
+            )
+        )
+
+        # Spawn background task for AI processing (tags, summary field)
+        asyncio.create_task(process_memory_async(result["id"]))
+
+        return {"memory_id": result["id"], "title": title, "summary": summary}
 
 
 # Global server instances
