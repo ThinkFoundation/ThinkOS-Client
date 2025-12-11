@@ -1,5 +1,11 @@
 # think-app
 
+## 0.1.3
+
+### Patch Changes
+
+- 5cd2a20: Fix Python.framework code signing to resolve "damaged" error on macOS
+
 ## 0.1.2
 
 ### Patch Changes
