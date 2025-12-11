@@ -2,9 +2,14 @@
   "manifest_version": 3,
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoM28Tz8K1587vX8QWs6yyyHbFR46rsgVSQkVDRe2xHEMhCY1KdDEL3DraxZM+0FXOycPeav/2HDuybZnP8CB3BM02GviZ4UhmY0IFBnQRiJTI13y5boNKSR8ENPAe4eaFxLELELQK9HE1klhFZgI04R989xYUW7ZaWBYc3qsQelyIaAK1GaFsubTQcngi4sfbCWnX8HW3oqu3yJ9A91SbRyNTNUwnc7S9OaBvtFKKZMSnF7BzdB7VztR/rehxWCm4Wa3BWZzrHN6OK1TiOzrsJ2byIVU4UiP2q5jXzJt0o5X7XLHPUc0CLxIqfVKGmK59wI2AM/GKxTHNX0o9KKriQIDAQAB",
   "name": "Think - Save to Personal AI",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Save web pages to your personal AI assistant",
-  "permissions": ["activeTab", "storage", "scripting", "nativeMessaging"],
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting",
+    "nativeMessaging"
+  ],
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
