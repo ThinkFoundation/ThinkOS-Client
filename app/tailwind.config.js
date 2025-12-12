@@ -7,6 +7,10 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Work Sans', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        heading: ['Goudy Bookletter 1911', 'Georgia', 'serif'],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
