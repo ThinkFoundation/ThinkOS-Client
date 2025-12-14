@@ -54,6 +54,7 @@ class MessageResponse(BaseModel):
 class ConversationResponse(BaseModel):
     id: int
     title: str
+    pinned: bool = False
     created_at: str
     updated_at: str
     message_count: int
@@ -74,6 +75,10 @@ class ConversationCreate(BaseModel):
 
 class ConversationUpdate(BaseModel):
     title: str
+
+
+class ConversationPinUpdate(BaseModel):
+    pinned: bool
 
 
 # Helpers

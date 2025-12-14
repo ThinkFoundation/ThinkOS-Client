@@ -9,6 +9,7 @@ import MemoriesPage from "./pages/MemoriesPage";
 import SettingsPage from "./pages/SettingsPage";
 import { NamePromptDialog } from "./components/NamePromptDialog";
 import { Button } from "@/components/ui/button";
+import { Toaster } from "@/components/ui/sonner";
 import { useSystemTheme } from "@/hooks/useSystemTheme";
 import { initializeApiToken, apiFetch } from "@/lib/api";
 
@@ -231,6 +232,8 @@ function App() {
         onOpenChange={setShowNameDialog}
         onNameSaved={(name) => setUserName(name)}
       />
+
+      <Toaster />
     </>
   );
 }

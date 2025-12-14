@@ -308,6 +308,17 @@ def migration_011(conn: Connection) -> None:
         ))
 
 
+@migration(12, "Add pinned column to conversations")
+def migration_012(conn: Connection) -> None:
+    """Add pinned boolean to conversations for pinning feature."""
+    result = conn.execute(text("PRAGMA table_info(conversations)")).fetchall()
+    columns = [row[1] for row in result]
+
+    if "pinned" not in columns:
+        conn.execute(text("ALTER TABLE conversations ADD COLUMN pinned INTEGER DEFAULT 0"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_conversations_pinned ON conversations(pinned)"))
+
+
 # --- Migration runner ---
 
 def run_migrations(conn: Connection) -> list[tuple[int, str]]:

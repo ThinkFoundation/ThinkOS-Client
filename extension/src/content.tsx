@@ -114,11 +114,39 @@ function init() {
     container.classList.add('dark');
   }
 
+  // Get font URLs using chrome.runtime.getURL
+  const workSansUrl = chrome.runtime.getURL('fonts/WorkSans-VariableFont_wght.ttf');
+  const goudyUrl = chrome.runtime.getURL('fonts/GoudyBookletter1911-Regular.ttf');
+
+  // Build @font-face CSS
+  const fontFaceCSS =
+    '@font-face {' +
+    "font-family: 'Work Sans';" +
+    "src: url('" + workSansUrl + "') format('truetype');" +
+    'font-weight: 100 900;' +
+    'font-display: swap;' +
+    '}' +
+    '@font-face {' +
+    "font-family: 'Goudy Bookletter 1911';" +
+    "src: url('" + goudyUrl + "') format('truetype');" +
+    'font-weight: 400;' +
+    'font-display: swap;' +
+    '}';
+
+  // Inject fonts into document head for broader compatibility
+  if (!document.getElementById('think-fonts')) {
+    const fontStyleEl = document.createElement('style');
+    fontStyleEl.id = 'think-fonts';
+    fontStyleEl.textContent = fontFaceCSS;
+    document.head.appendChild(fontStyleEl);
+  }
+
   const shadow = container.attachShadow({ mode: 'open' });
 
-  // Inject Tailwind CSS (compiled with rem→px) as inline styles
+  // Inject @font-face + Tailwind CSS into Shadow DOM
+  // Fonts must be in Shadow DOM to work reliably across browsers
   const styleEl = document.createElement('style');
-  styleEl.textContent = contentStyles;
+  styleEl.textContent = fontFaceCSS + contentStyles;
   shadow.appendChild(styleEl);
 
   // Create React root in shadow DOM

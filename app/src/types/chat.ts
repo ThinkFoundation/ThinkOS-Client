@@ -31,6 +31,7 @@ export interface ChatMessage {
 export interface Conversation {
   id: number;
   title: string;
+  pinned: boolean;
   created_at: string;
   updated_at: string;
   message_count: number;

@@ -519,6 +519,7 @@ async def create_conversation(title: str = "") -> dict:
             return {
                 "id": conversation.id,
                 "title": conversation.title,
+                "pinned": conversation.pinned,
                 "created_at": conversation.created_at.isoformat(),
                 "updated_at": conversation.updated_at.isoformat(),
                 "message_count": 0,
@@ -528,10 +529,10 @@ async def create_conversation(title: str = "") -> dict:
 
 
 async def get_conversations(limit: int = 50, offset: int = 0) -> list[dict]:
-    """Get all conversations ordered by most recent update."""
+    """Get all conversations ordered by pinned status then most recent update."""
     def _get():
         with get_session_maker()() as session:
-            # Get conversations with message count
+            # Get conversations with message count, pinned first then by date
             conversations = session.execute(
                 select(
                     Conversation,
@@ -539,7 +540,7 @@ async def get_conversations(limit: int = 50, offset: int = 0) -> list[dict]:
                 )
                 .outerjoin(Message, Conversation.id == Message.conversation_id)
                 .group_by(Conversation.id)
-                .order_by(Conversation.updated_at.desc())
+                .order_by(Conversation.pinned.desc(), Conversation.updated_at.desc())
                 .offset(offset)
                 .limit(limit)
             ).all()
@@ -557,6 +558,7 @@ async def get_conversations(limit: int = 50, offset: int = 0) -> list[dict]:
                 result.append({
                     "id": conv.id,
                     "title": conv.title,
+                    "pinned": conv.pinned,
                     "created_at": conv.created_at.isoformat(),
                     "updated_at": conv.updated_at.isoformat(),
                     "message_count": message_count,
@@ -640,6 +642,20 @@ async def update_conversation_title(conversation_id: int, title: str) -> bool:
             if not conversation:
                 return False
             conversation.title = title
+            session.commit()
+            return True
+
+    return await run_sync(_update)
+
+
+async def toggle_conversation_pinned(conversation_id: int, pinned: bool) -> bool:
+    """Toggle a conversation's pinned status."""
+    def _update():
+        with get_session_maker()() as session:
+            conversation = session.get(Conversation, conversation_id)
+            if not conversation:
+                return False
+            conversation.pinned = pinned
             session.commit()
             return True
 

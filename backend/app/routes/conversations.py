@@ -9,8 +9,9 @@ from ..db.crud import (
     get_conversation,
     delete_conversation,
     update_conversation_title,
+    toggle_conversation_pinned,
 )
-from ..schemas import ConversationCreate, ConversationUpdate
+from ..schemas import ConversationCreate, ConversationUpdate, ConversationPinUpdate
 from ..events import event_manager, MemoryEvent, EventType
 from ..models_info import get_context_window
 
@@ -85,3 +86,20 @@ async def update_conversation(conversation_id: int, request: ConversationUpdate)
     ))
 
     return {"success": True}
+
+
+@router.patch("/api/conversations/{conversation_id}/pin")
+async def pin_conversation(conversation_id: int, request: ConversationPinUpdate):
+    """Toggle a conversation's pinned status."""
+    success = await toggle_conversation_pinned(conversation_id, request.pinned)
+    if not success:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # Emit event
+    await event_manager.publish(MemoryEvent(
+        type=EventType.CONVERSATION_UPDATED,
+        memory_id=conversation_id,
+        data={"pinned": request.pinned},
+    ))
+
+    return {"success": True, "pinned": request.pinned}

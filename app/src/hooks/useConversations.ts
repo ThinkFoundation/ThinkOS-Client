@@ -31,12 +31,17 @@ export function useConversations() {
       });
     },
     onConversationUpdated: (id, data) => {
-      const eventData = data as { title?: string };
-      if (eventData && "title" in eventData) {
+      const eventData = data as { title?: string; pinned?: boolean };
+      if (eventData) {
         setConversations((prev) =>
           prev.map((c) =>
             c.id === id
-              ? { ...c, title: eventData.title!, updated_at: new Date().toISOString() }
+              ? {
+                  ...c,
+                  ...(eventData.title !== undefined && { title: eventData.title }),
+                  ...(eventData.pinned !== undefined && { pinned: eventData.pinned }),
+                  updated_at: new Date().toISOString(),
+                }
               : c
           )
         );
@@ -66,6 +71,23 @@ export function useConversations() {
     return false;
   };
 
+  const togglePinConversation = async (id: number, pinned: boolean) => {
+    try {
+      const res = await apiFetch(`/api/conversations/${id}/pin`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pinned }),
+      });
+      if (res.ok) {
+        // State will be updated via SSE event
+        return true;
+      }
+    } catch (err) {
+      console.error("Failed to toggle pin:", err);
+    }
+    return false;
+  };
+
   const refreshConversations = () => {
     setIsLoading(true);
     fetchConversations();
@@ -75,6 +97,7 @@ export function useConversations() {
     conversations,
     isLoading,
     deleteConversation,
+    togglePinConversation,
     refreshConversations,
   };
 }

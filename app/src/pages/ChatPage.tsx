@@ -243,7 +243,11 @@ export default function ChatPage() {
             <p className="text-muted-foreground">Loading messages...</p>
           </div>
         ) : (
-          <ChatMessageList messages={messages} isLoading={isLoading} />
+          <ChatMessageList
+            messages={messages}
+            isLoading={isLoading}
+            onSendMessage={(msg) => submitChat(msg, currentConversationId)}
+          />
         )}
 
         {/* Sources panel */}
