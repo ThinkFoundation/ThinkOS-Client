@@ -1,5 +1,65 @@
 # think-app
 
+## 0.2.0
+
+### Minor Changes
+
+- cfcdd6e: Add Work Sans body font and Goudy Bookletter 1911 heading font
+- ed97c37: feat: add provider switching and context usage tracking
+
+  ## Provider Switching
+
+  - Switch between Ollama (local) and OpenAI (cloud) providers
+  - Separate selection for chat and embedding models
+  - Provider status indicator in sidebar showing connection state
+  - Auto-sync embedding provider when AI provider changes
+  - Validate provider/model combinations to prevent invalid configs
+
+  ## Context Usage Tracking
+
+  - Real-time token usage indicator with circular progress ring
+  - Color-coded usage levels (green → yellow → orange → red)
+  - Hover popover showing current context and session totals
+  - Track prompt, completion, and total tokens per message
+
+  ## Model Management
+
+  - Model selector component with download support for Ollama
+  - Display model context window sizes
+  - Block known broken models (nomic-embed-text)
+  - Reset to default model when switching providers
+
+  ## Re-embedding System
+
+  - Background job system for re-embedding memories when model changes
+  - Progress tracking with cancellation support
+  - Smart detection of stale embeddings by model mismatch
+  - Warning dialog showing affected memory count before changes
+
+  ## Backend Changes
+
+  - Database-backed settings with thread-safe reloading
+  - Token usage columns on messages table
+  - Embedding model tracking on memories table
+  - Jobs table for background task management
+  - Model context window metadata registry
+
+- f9f86d0: Add sidebar chat feature to browser extension
+
+  - Add chat sidebar that can be opened from extension popup to chat with AI about current page
+  - Integrate with saved memories for context-aware responses
+  - Add background service worker for native messaging from content scripts
+  - Support saving conversations and generating AI summaries as memories
+  - Add CORS preflight handling for extension requests
+
+- a752be6: Add dedicated chat page accessible from sidebar with conversation history
+
+### Patch Changes
+
+- f8054bc: Fix "New Chat" button immediately reloading previous conversation
+- 2183767: Update application icon
+- b7865b3: fix(app): apply macOS squircle mask to app icon for proper rounded corners
+
 ## 0.1.8
 
 ### Patch Changes
