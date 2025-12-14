@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 
+from .. import config
 from ..db.crud import (
     create_conversation,
     get_conversations,
@@ -11,6 +12,7 @@ from ..db.crud import (
 )
 from ..schemas import ConversationCreate, ConversationUpdate
 from ..events import event_manager, MemoryEvent, EventType
+from ..models_info import get_context_window
 
 router = APIRouter()
 
@@ -43,6 +45,11 @@ async def get_conversation_detail(conversation_id: int):
     conversation = await get_conversation(conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # Add current model's context window for usage indicator
+    model = config.settings.ollama_model if config.settings.ai_provider == "ollama" else config.settings.openai_model
+    conversation["context_window"] = get_context_window(model)
+
     return conversation
 
 

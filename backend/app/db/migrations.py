@@ -251,6 +251,63 @@ def migration_008(conn: Connection) -> None:
         """))
 
 
+@migration(9, "Add token usage columns to messages")
+def migration_009(conn: Connection) -> None:
+    """Add token usage tracking to messages."""
+    result = conn.execute(text("PRAGMA table_info(messages)")).fetchall()
+    columns = [row[1] for row in result]
+
+    if "prompt_tokens" not in columns:
+        conn.execute(text("ALTER TABLE messages ADD COLUMN prompt_tokens INTEGER"))
+    if "completion_tokens" not in columns:
+        conn.execute(text("ALTER TABLE messages ADD COLUMN completion_tokens INTEGER"))
+    if "total_tokens" not in columns:
+        conn.execute(text("ALTER TABLE messages ADD COLUMN total_tokens INTEGER"))
+
+
+@migration(10, "Add embedding_model column to memories")
+def migration_010(conn: Connection) -> None:
+    """Track which embedding model was used for each memory."""
+    result = conn.execute(text("PRAGMA table_info(memories)")).fetchall()
+    columns = [row[1] for row in result]
+
+    if "embedding_model" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN embedding_model VARCHAR(100)"))
+
+
+@migration(11, "Create jobs table for background task tracking")
+def migration_011(conn: Connection) -> None:
+    """Create jobs table for tracking background tasks like re-embedding."""
+    result = conn.execute(text(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='jobs'"
+    )).fetchone()
+
+    if not result:
+        conn.execute(text("""
+            CREATE TABLE jobs (
+                id VARCHAR(36) PRIMARY KEY,
+                type VARCHAR(50) NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                params TEXT,
+                result TEXT,
+                error TEXT,
+                progress INTEGER DEFAULT 0,
+                processed INTEGER DEFAULT 0,
+                failed INTEGER DEFAULT 0,
+                total INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                started_at TIMESTAMP,
+                completed_at TIMESTAMP
+            )
+        """))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_jobs_type_status ON jobs(type, status)"
+        ))
+
+
 # --- Migration runner ---
 
 def run_migrations(conn: Connection) -> list[tuple[int, str]]:

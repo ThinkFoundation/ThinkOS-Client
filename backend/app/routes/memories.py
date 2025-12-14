@@ -14,13 +14,15 @@ from ..db import (
     update_memory,
     update_memory_embedding,
     get_memories_without_embeddings,
+    get_memories_needing_reembedding,
+    count_memories_needing_reembedding,
     get_all_tags,
     add_tags_to_memory,
     remove_tag_from_memory,
     get_memory_tags,
 )
 from ..db.search import search_similar_memories
-from ..services.embeddings import get_embedding
+from ..services.embeddings import get_embedding, get_current_embedding_model
 from ..services.query_processing import preprocess_query, extract_keywords
 from ..services.ai_processing import process_memory_async
 from ..schemas import MemoryCreate, format_memory_for_embedding
@@ -141,8 +143,10 @@ async def save_memory(memory: MemoryCreate):
             return {"duplicate": True, "existing_memory": existing}
 
     embedding = None
+    embedding_model = None
     try:
         embedding = await get_embedding(format_memory_for_embedding(memory.title, memory.content))
+        embedding_model = get_current_embedding_model()
     except Exception as e:
         logger.warning(f"Embedding generation failed: {e}")
 
@@ -155,6 +159,7 @@ async def save_memory(memory: MemoryCreate):
         memory_type=memory.type,
         url=memory.url,
         embedding=embedding,
+        embedding_model=embedding_model,
         original_title=original_title,
     )
 
@@ -184,8 +189,10 @@ async def save_memory(memory: MemoryCreate):
 @router.put("/memories/{memory_id}")
 async def update_memory_endpoint(memory_id: int, memory: MemoryCreate):
     embedding = None
+    embedding_model = None
     try:
         embedding = await get_embedding(format_memory_for_embedding(memory.title, memory.content))
+        embedding_model = get_current_embedding_model()
     except Exception as e:
         logger.warning(f"Embedding generation failed: {e}")
 
@@ -194,6 +201,7 @@ async def update_memory_endpoint(memory_id: int, memory: MemoryCreate):
         title=memory.title,
         content=memory.content,
         embedding=embedding,
+        embedding_model=embedding_model,
     )
     if not result:
         raise HTTPException(status_code=404, detail="Memory not found")
@@ -234,18 +242,63 @@ async def generate_embeddings():
     memories = await get_memories_without_embeddings()
     processed = 0
     failed = 0
+    embedding_model = get_current_embedding_model()
 
     for memory in memories:
         try:
             text = format_memory_for_embedding(memory['title'], memory['content'])
             embedding = await get_embedding(text)
-            await update_memory_embedding(memory["id"], embedding)
+            await update_memory_embedding(memory["id"], embedding, embedding_model)
             processed += 1
         except Exception as e:
             logger.warning(f"Embedding generation failed for memory {memory['id']}: {e}")
             failed += 1
 
     return {"processed": processed, "failed": failed, "total": len(memories)}
+
+
+@router.get("/memories/stale-embeddings-count")
+async def get_stale_embeddings_count():
+    """Get count of memories that need re-embedding."""
+    embedding_model = get_current_embedding_model()
+    count = await count_memories_needing_reembedding(embedding_model)
+    return {"count": count}
+
+
+@router.post("/memories/regenerate-embeddings")
+async def regenerate_embeddings(batch_size: int = Query(10, ge=1, le=50)):
+    """
+    Regenerate embeddings for memories that have stale embeddings (different model).
+    Processes a batch at a time to avoid overloading the backend.
+    Returns remaining count so frontend can call repeatedly until done.
+    """
+    embedding_model = get_current_embedding_model()
+
+    # Get count of remaining memories that need re-embedding
+    total_remaining = await count_memories_needing_reembedding(embedding_model)
+
+    if total_remaining == 0:
+        return {"processed": 0, "failed": 0, "remaining": 0}
+
+    # Get a batch of memories to process
+    memories = await get_memories_needing_reembedding(embedding_model, limit=batch_size)
+    processed = 0
+    failed = 0
+
+    for memory in memories:
+        try:
+            text = format_memory_for_embedding(memory['title'], memory['content'])
+            embedding = await get_embedding(text)
+            await update_memory_embedding(memory["id"], embedding, embedding_model)
+            processed += 1
+        except Exception as e:
+            logger.warning(f"Re-embedding failed for memory {memory['id']}: {e}")
+            failed += 1
+
+    # Calculate remaining (subtract what we just processed successfully)
+    remaining = total_remaining - processed
+
+    return {"processed": processed, "failed": failed, "remaining": remaining}
 
 
 # Tag endpoints

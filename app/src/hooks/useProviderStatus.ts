@@ -61,6 +61,17 @@ export function useProviderStatus({
     };
   }, [enabled, pollInterval, fetchStatus]);
 
+  // Listen for settings changes to refresh immediately
+  useEffect(() => {
+    const handleSettingsChanged = () => {
+      fetchStatus();
+    };
+    window.addEventListener("settings-changed", handleSettingsChanged);
+    return () => {
+      window.removeEventListener("settings-changed", handleSettingsChanged);
+    };
+  }, [fetchStatus]);
+
   return {
     status,
     isLoading,

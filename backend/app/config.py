@@ -1,39 +1,34 @@
-import json
-from pathlib import Path
+import threading
+
 from pydantic_settings import BaseSettings
 
 
-def get_config_path() -> Path:
-    """Get path to the settings JSON file."""
-    # Use ~/.think for config storage
-    config_dir = Path.home() / ".think"
-    config_dir.mkdir(exist_ok=True)
-    return config_dir / "settings.json"
+# Settings synchronization primitives
+_settings_lock = threading.RLock()
+_settings_version = 0
 
 
-def load_saved_settings() -> dict:
-    """Load settings from JSON file if exists."""
-    config_path = get_config_path()
-    if config_path.exists():
-        try:
-            return json.loads(config_path.read_text())
-        except (json.JSONDecodeError, IOError):
-            pass
-    return {}
+def load_settings_from_db() -> dict:
+    """Load settings from database if available.
 
+    Returns empty dict if DB is not initialized or on error.
+    This is called synchronously during settings reload.
+    """
+    try:
+        from .db.core import is_db_initialized, get_session_maker
+        from .models import Setting
 
-def save_settings(updates: dict) -> None:
-    """Save settings updates to JSON file."""
-    config_path = get_config_path()
+        if not is_db_initialized():
+            return {}
 
-    # Load existing settings
-    current = load_saved_settings()
-
-    # Merge updates
-    current.update(updates)
-
-    # Write back
-    config_path.write_text(json.dumps(current, indent=2))
+        # Use sync session since this is called during config init
+        with get_session_maker()() as session:
+            settings_dict = {}
+            for setting in session.query(Setting).all():
+                settings_dict[setting.key] = setting.value
+            return settings_dict
+    except Exception:
+        return {}
 
 
 class Settings(BaseSettings):
@@ -51,7 +46,7 @@ class Settings(BaseSettings):
 
     # Embedding settings
     embedding_provider: str = "ollama"  # "ollama" or "openai"
-    ollama_embedding_model: str = "nomic-embed-text"
+    ollama_embedding_model: str = "mxbai-embed-large"
     openai_embedding_model: str = "text-embedding-3-small"
 
     class Config:
@@ -59,27 +54,46 @@ class Settings(BaseSettings):
 
 
 def create_settings() -> Settings:
-    """Create settings instance with saved values overlaid."""
-    saved = load_saved_settings()
+    """Create settings instance with DB values overlaid."""
+    saved = load_settings_from_db()
 
-    # Create base settings (from env/.env file)
-    base = Settings()
-
-    # Override with saved settings
-    if "ai_provider" in saved:
-        base.ai_provider = saved["ai_provider"]
-    if "openai_base_url" in saved:
-        base.openai_base_url = saved["openai_base_url"]
-    # Note: openai_api_key is now stored in DB via secrets service
-
-    return base
+    # Construct Settings with DB values, falling back to defaults
+    # Note: We pass values directly to constructor because Pydantic models
+    # may be frozen and not allow attribute assignment after creation
+    return Settings(
+        ai_provider=saved.get("ai_provider", "ollama"),
+        openai_base_url=saved.get("openai_base_url", ""),
+        ollama_model=saved.get("ollama_model", "llama3.2"),
+        openai_model=saved.get("openai_model", "gpt-4o-mini"),
+        embedding_provider=saved.get("embedding_provider", "ollama"),
+        ollama_embedding_model=saved.get("ollama_embedding_model", "mxbai-embed-large"),
+        openai_embedding_model=saved.get("openai_embedding_model", "text-embedding-3-small"),
+    )
 
 
 # Global settings instance
 settings = create_settings()
 
 
-def reload_settings() -> None:
-    """Reload settings from file."""
-    global settings
-    settings = create_settings()
+def reload_settings() -> int:
+    """Reload settings from database.
+
+    Thread-safe reload that returns the new version number.
+    The version number can be used by clients for cache invalidation.
+    """
+    global settings, _settings_version
+    with _settings_lock:
+        settings = create_settings()
+        _settings_version += 1
+        return _settings_version
+
+
+def get_settings_version() -> int:
+    """Get current settings version for cache invalidation."""
+    return _settings_version
+
+
+def get_settings_with_version() -> tuple["Settings", int]:
+    """Get settings with version for atomic reads."""
+    with _settings_lock:
+        return settings, _settings_version
