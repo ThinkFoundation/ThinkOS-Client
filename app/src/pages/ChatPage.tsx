@@ -13,6 +13,7 @@ export default function ChatPage() {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const isStartingNewChatRef = useRef(false);
+  const wantsNewChatRef = useRef(false);
 
   // Track pending conversation creation to prevent race conditions
   const pendingConversationRef = useRef<{
@@ -40,9 +41,18 @@ export default function ChatPage() {
 
   const { conversations } = useConversations();
 
+  // Wrapper for starting new chat that prevents auto-load from immediately re-selecting
+  const handleStartNewChat = useCallback(() => {
+    wantsNewChatRef.current = true;
+    startNewChat();
+  }, [startNewChat]);
+
   // Core chat submission logic
   const submitChat = useCallback(async (messageText: string, conversationId: number | null) => {
     if (!messageText.trim()) return;
+
+    // Clear new chat flag since user is now sending a message
+    wantsNewChatRef.current = false;
 
     // FIX: Handle conversation ID race condition
     // If no conversation ID and another message is already creating one, wait for it
@@ -213,6 +223,7 @@ export default function ChatPage() {
   // Effect 2: Auto-load most recent conversation on mount (when no pending message)
   useEffect(() => {
     if (isStartingNewChatRef.current) return;
+    if (wantsNewChatRef.current) return;
     if (currentConversationId || messages.length > 0) return;
     if (conversations.length === 0) return;
 
@@ -222,7 +233,7 @@ export default function ChatPage() {
   return (
     <div className="flex h-full">
       {/* Chat history sidebar */}
-      <ChatSidebar />
+      <ChatSidebar onNewChat={handleStartNewChat} />
 
       {/* Chat content */}
       <div className="flex-1 flex flex-col">
