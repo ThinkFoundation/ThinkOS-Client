@@ -4,13 +4,14 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from openai import APIConnectionError
 
-from ..services.ai import chat as ai_chat, chat_stream as ai_chat_stream
+from ..services.ai import chat as ai_chat, chat_stream as ai_chat_stream, get_model
+from ..models_info import get_context_window
 from ..services.ai_processing import process_conversation_title_async
 from ..services.embeddings import get_embedding
 from ..services.query_processing import preprocess_query, extract_keywords
 from ..db.search import search_similar_memories
 from ..schemas import ChatRequest
-from ..config import settings
+from .. import config
 from ..db.crud import create_conversation, add_message, update_conversation_title, get_conversation
 from ..events import event_manager, MemoryEvent, EventType
 
@@ -139,7 +140,7 @@ async def chat(request: ChatRequest):
         }
     except APIConnectionError:
         error_msg = ""
-        if settings.ai_provider == "ollama":
+        if config.settings.ai_provider == "ollama":
             error_msg = "Cannot connect to Ollama. Please make sure Ollama is running, or switch to OpenAI in Settings."
         else:
             error_msg = "Cannot connect to OpenAI. Please check your API key in Settings."
@@ -238,24 +239,32 @@ async def chat_stream(request: ChatRequest):
 
     async def generate():
         full_response = ""
+        usage_data = None
 
         # Send metadata first (conversation_id, sources)
         yield f"data: {json.dumps({'type': 'meta', 'conversation_id': conversation_id, 'sources': sources, 'searched': True})}\n\n"
 
         try:
-            async for token in ai_chat_stream(request.message, context=context, history=history):
-                full_response += token
-                yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+            async for token, usage in ai_chat_stream(request.message, context=context, history=history):
+                if token:
+                    full_response += token
+                    yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+                if usage:
+                    usage_data = usage
 
-            # Save complete response with sources
-            await add_message(conversation_id, "assistant", full_response, sources=sources)
+            # Save complete response with sources and usage
+            await add_message(conversation_id, "assistant", full_response, sources=sources, usage=usage_data)
 
-            # Signal done
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            # Signal done with usage and context window info
+            done_data = {'type': 'done'}
+            if usage_data:
+                done_data['usage'] = usage_data
+                done_data['context_window'] = get_context_window(get_model())
+            yield f"data: {json.dumps(done_data)}\n\n"
 
         except APIConnectionError:
             error_msg = "Cannot connect to AI provider. Please check your settings."
-            if settings.ai_provider == "ollama":
+            if config.settings.ai_provider == "ollama":
                 error_msg = "Cannot connect to Ollama. Please make sure Ollama is running."
             await add_message(conversation_id, "assistant", error_msg)
             yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"

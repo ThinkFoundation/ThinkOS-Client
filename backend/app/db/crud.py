@@ -1,8 +1,30 @@
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from sqlalchemy import select, func
 
 from ..models import Memory, Setting, Tag, MemoryTag, Conversation, Message, MessageSource
 from .core import get_session_maker, run_sync, serialize_embedding
+
+
+@contextmanager
+def transaction():
+    """Context manager for atomic database operations.
+
+    Usage:
+        with transaction() as session:
+            # All operations in this block are atomic
+            session.add(obj)
+            # Commits on exit, rolls back on exception
+    """
+    session = get_session_maker()()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
 async def create_memory(
@@ -12,6 +34,7 @@ async def create_memory(
     url: str | None = None,
     summary: str | None = None,
     embedding: list[float] | None = None,
+    embedding_model: str | None = None,
     original_title: str | None = None,
 ) -> dict:
     def _create():
@@ -24,6 +47,7 @@ async def create_memory(
                 content=content,
                 summary=summary,
                 embedding=serialize_embedding(embedding) if embedding else None,
+                embedding_model=embedding_model if embedding else None,
             )
             session.add(memory)
             session.commit()
@@ -180,6 +204,7 @@ async def update_memory(
     title: str,
     content: str,
     embedding: list[float] | None = None,
+    embedding_model: str | None = None,
 ) -> dict | None:
     def _update():
         with get_session_maker()() as session:
@@ -190,6 +215,7 @@ async def update_memory(
             memory.content = content
             if embedding:
                 memory.embedding = serialize_embedding(embedding)
+                memory.embedding_model = embedding_model
             session.commit()
             session.refresh(memory)
             return {
@@ -203,7 +229,11 @@ async def update_memory(
     return await run_sync(_update)
 
 
-async def update_memory_embedding(memory_id: int, embedding: list[float]) -> bool:
+async def update_memory_embedding(
+    memory_id: int,
+    embedding: list[float],
+    embedding_model: str | None = None,
+) -> bool:
     """Update embedding for a specific memory."""
     def _update():
         with get_session_maker()() as session:
@@ -211,6 +241,8 @@ async def update_memory_embedding(memory_id: int, embedding: list[float]) -> boo
             if not memory:
                 return False
             memory.embedding = serialize_embedding(embedding)
+            if embedding_model:
+                memory.embedding_model = embedding_model
             session.commit()
             return True
 
@@ -251,6 +283,60 @@ async def get_memories_without_embeddings() -> list[dict]:
         with get_session_maker()() as session:
             memories = session.execute(
                 select(Memory).where(Memory.embedding.is_(None))
+            ).scalars().all()
+            return [
+                {
+                    "id": m.id,
+                    "title": m.title,
+                    "content": m.content,
+                }
+                for m in memories
+            ]
+
+    return await run_sync(_get)
+
+
+async def count_memories_with_embeddings() -> int:
+    """Count memories that have embeddings."""
+    def _count():
+        with get_session_maker()() as session:
+            count = session.execute(
+                select(func.count()).select_from(Memory).where(Memory.embedding.is_not(None))
+            ).scalar()
+            return count or 0
+
+    return await run_sync(_count)
+
+
+async def count_memories_needing_reembedding(current_model: str) -> int:
+    """Count memories that need embedding (no embedding or stale embedding)."""
+    def _count():
+        with get_session_maker()() as session:
+            # Count memories that:
+            # 1. Have no embedding at all (embedding IS NULL), OR
+            # 2. Have embeddings but embedding_model != current_model (stale)
+            count = session.execute(
+                select(func.count()).select_from(Memory).where(
+                    (Memory.embedding.is_(None)) |
+                    ((Memory.embedding.is_not(None)) &
+                     ((Memory.embedding_model != current_model) | (Memory.embedding_model.is_(None))))
+                )
+            ).scalar()
+            return count or 0
+
+    return await run_sync(_count)
+
+
+async def get_memories_needing_reembedding(current_model: str, limit: int = 10) -> list[dict]:
+    """Get memories that need embedding (no embedding or stale embedding)."""
+    def _get():
+        with get_session_maker()() as session:
+            memories = session.execute(
+                select(Memory).where(
+                    (Memory.embedding.is_(None)) |
+                    ((Memory.embedding.is_not(None)) &
+                     ((Memory.embedding_model != current_model) | (Memory.embedding_model.is_(None))))
+                ).limit(limit)
             ).scalars().all()
             return [
                 {
@@ -516,6 +602,9 @@ async def get_conversation(conversation_id: int) -> dict | None:
                     "content": m.content,
                     "created_at": m.created_at.isoformat(),
                     "sources": sources,
+                    "prompt_tokens": m.prompt_tokens,
+                    "completion_tokens": m.completion_tokens,
+                    "total_tokens": m.total_tokens,
                 })
 
             return {
@@ -562,8 +651,9 @@ async def add_message(
     role: str,
     content: str,
     sources: list[dict] | None = None,
+    usage: dict | None = None,
 ) -> dict | None:
-    """Add a message to a conversation with optional sources."""
+    """Add a message to a conversation with optional sources and token usage."""
     def _add():
         with get_session_maker()() as session:
             conversation = session.get(Conversation, conversation_id)
@@ -575,6 +665,13 @@ async def add_message(
                 role=role,
                 content=content,
             )
+
+            # Store token usage if provided (for assistant messages)
+            if usage:
+                message.prompt_tokens = usage.get("prompt_tokens")
+                message.completion_tokens = usage.get("completion_tokens")
+                message.total_tokens = usage.get("total_tokens")
+
             session.add(message)
             session.flush()  # Get message.id before adding sources
 
@@ -601,6 +698,9 @@ async def add_message(
                 "content": message.content,
                 "created_at": message.created_at.isoformat(),
                 "sources": sources or [],
+                "prompt_tokens": message.prompt_tokens,
+                "completion_tokens": message.completion_tokens,
+                "total_tokens": message.total_tokens,
             }
 
     return await run_sync(_add)

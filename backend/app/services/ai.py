@@ -1,6 +1,6 @@
 from typing import AsyncGenerator
 from openai import AsyncOpenAI
-from ..config import settings
+from .. import config
 
 
 # Custom system prompt for Think
@@ -15,16 +15,16 @@ async def get_client() -> AsyncOpenAI:
     """Get configured OpenAI client (works with Ollama and OpenAI-compatible services)."""
     from .secrets import get_api_key
 
-    if settings.ai_provider == "ollama":
+    if config.settings.ai_provider == "ollama":
         return AsyncOpenAI(
-            base_url=settings.ollama_base_url,
+            base_url=config.settings.ollama_base_url,
             api_key="ollama",  # Ollama doesn't need a real key
         )
     else:
         api_key = await get_api_key("openai") or ""
-        if settings.openai_base_url:
+        if config.settings.openai_base_url:
             return AsyncOpenAI(
-                base_url=settings.openai_base_url,
+                base_url=config.settings.openai_base_url,
                 api_key=api_key,
             )
         return AsyncOpenAI(api_key=api_key)
@@ -32,9 +32,9 @@ async def get_client() -> AsyncOpenAI:
 
 def get_model() -> str:
     """Get the model name based on provider."""
-    if settings.ai_provider == "ollama":
-        return settings.ollama_model
-    return settings.openai_model
+    if config.settings.ai_provider == "ollama":
+        return config.settings.ollama_model
+    return config.settings.openai_model
 
 
 def build_messages(
@@ -94,8 +94,11 @@ async def chat_stream(
     message: str,
     context: str = "",
     history: list[dict] | None = None
-) -> AsyncGenerator[str, None]:
-    """Stream AI response token by token."""
+) -> AsyncGenerator[tuple[str, dict | None], None]:
+    """Stream AI response token by token, yielding (token, usage_or_none).
+
+    Usage data is yielded at the end of the stream with empty token.
+    """
     client = await get_client()
     model = get_model()
     messages = build_messages(message, context, history)
@@ -103,9 +106,19 @@ async def chat_stream(
     stream = await client.chat.completions.create(
         model=model,
         messages=messages,
-        stream=True
+        stream=True,
+        stream_options={"include_usage": True},  # Get usage at end of stream
     )
 
     async for chunk in stream:
-        if chunk.choices[0].delta.content:
-            yield chunk.choices[0].delta.content
+        # Yield content tokens
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content, None
+
+        # Final chunk includes usage stats
+        if chunk.usage:
+            yield "", {
+                "prompt_tokens": chunk.usage.prompt_tokens,
+                "completion_tokens": chunk.usage.completion_tokens,
+                "total_tokens": chunk.usage.total_tokens,
+            }

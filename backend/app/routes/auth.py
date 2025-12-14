@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
+from ..config import reload_settings
 from ..db import init_db, is_db_initialized, db_exists
 from ..services.secrets import derive_db_key, set_api_key, get_api_key, delete_api_key
 from ..schemas import SetPasswordRequest, UnlockRequest, ApiKeyRequest
@@ -25,6 +26,7 @@ async def setup_password(request: SetPasswordRequest):
 
     db_key = derive_db_key(request.password)
     await init_db(db_key)
+    reload_settings()  # Load settings from newly created DB
 
     return {"success": True}
 
@@ -41,6 +43,7 @@ async def unlock(request: UnlockRequest):
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid password")
 
+    reload_settings()  # Load settings from unlocked DB
     return {"success": True}
 
 

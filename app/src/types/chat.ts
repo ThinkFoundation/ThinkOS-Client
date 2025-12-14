@@ -6,6 +6,12 @@ export interface SourceMemory {
   url?: string;
 }
 
+export interface TokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
 export interface ChatMessage {
   id: string | number;
   role: "user" | "assistant";
@@ -16,6 +22,10 @@ export interface ChatMessage {
   sources?: SourceMemory[];
   searched?: boolean;
   isStreaming?: boolean;
+  // Token usage (for assistant messages)
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
 }
 
 export interface Conversation {
@@ -33,4 +43,5 @@ export interface ConversationDetail {
   created_at: string;
   updated_at: string;
   messages: ChatMessage[];
+  context_window?: number;
 }
