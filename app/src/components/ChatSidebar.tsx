@@ -4,15 +4,19 @@ import { useConversations } from "@/hooks/useConversations";
 import { useConversation } from "@/contexts/ConversationContext";
 import { cn } from "@/lib/utils";
 
-export function ChatSidebar() {
+interface ChatSidebarProps {
+  onNewChat: () => void;
+}
+
+export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
   const { conversations, deleteConversation } = useConversations();
-  const { currentConversationId, selectConversation, startNewChat } = useConversation();
+  const { currentConversationId, selectConversation } = useConversation();
 
   const handleDelete = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
     const success = await deleteConversation(id);
     if (success && currentConversationId === id) {
-      startNewChat();
+      onNewChat();
     }
   };
 
@@ -23,7 +27,7 @@ export function ChatSidebar() {
         <Button
           variant="outline"
           size="sm"
-          onClick={startNewChat}
+          onClick={onNewChat}
           className="w-full gap-2"
         >
           <Plus className="h-4 w-4" />
