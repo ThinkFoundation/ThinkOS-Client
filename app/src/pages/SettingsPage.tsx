@@ -267,9 +267,9 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
 
     // Check if provider or embedding model is changing
     if (providerChanged || embeddingModelChanged) {
-      // Check embedding impact
+      // Check embedding impact - show dialog regardless of count
       const impact = await checkEmbeddingImpact();
-      if (impact && impact.affected_count > 0) {
+      if (impact) {
         setAffectedCount(impact.affected_count);
         setShowProviderWarning(true);
         return;
@@ -582,16 +582,22 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
                     <p className="text-sm text-muted-foreground mt-1">
                       Your changes will affect how memories are embedded for search.
                     </p>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      {affectedCount} {affectedCount === 1 ? "memory" : "memories"} will need to be
-                      re-embedded for search to work correctly.
-                    </p>
+                    {affectedCount > 0 ? (
+                      <p className="text-sm text-muted-foreground mt-2">
+                        {affectedCount} {affectedCount === 1 ? "memory" : "memories"} will need to be
+                        re-embedded for search to work correctly.
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Your embedding model setting will be updated.
+                      </p>
+                    )}
                   </div>
                 </div>
 
                 <div className="flex flex-col gap-2">
                   <Button onClick={handleProviderSaveAndReembed} className="w-full">
-                    Save & Re-embed Now
+                    {affectedCount > 0 ? "Save & Re-embed Now" : "Save Settings"}
                   </Button>
                   <Button
                     variant="ghost"
