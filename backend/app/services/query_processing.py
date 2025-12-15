@@ -5,7 +5,10 @@ Transforms question-style queries into statement-style queries that better
 match stored memory content for embedding similarity search.
 """
 
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 # Question patterns to transform - order matters (more specific first)
 QUESTION_PATTERNS = [
@@ -46,8 +49,10 @@ def preprocess_query(query: str) -> str:
         match = re.match(pattern, query_stripped, re.IGNORECASE)
         if match:
             result = re.sub(pattern, replacement, query_stripped, flags=re.IGNORECASE)
+            logger.info(f"Query transformed: '{query_stripped}' -> '{result.strip()}'")
             return result.strip()
 
+    logger.info(f"Query unchanged: '{query_stripped}'")
     return query_stripped
 
 
@@ -82,4 +87,6 @@ def extract_keywords(query: str) -> str:
         keywords = [w for w in words if len(w) > 2]
 
     # FTS5 OR query for flexibility
-    return ' OR '.join(keywords) if keywords else query
+    result = ' OR '.join(keywords) if keywords else query
+    logger.info(f"Keywords extracted: '{query}' -> '{result}'")
+    return result

@@ -33,6 +33,7 @@ export function ModelSelector({ type = "chat", provider, selectedModel, onModelC
   const [pullingModel, setPullingModel] = useState<string | null>(null);
   const [pullProgress, setPullProgress] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const lastFetchedProviderRef = useRef<string | undefined>(undefined);
 
   // Use selectedModel prop if provided (controlled), otherwise use internal state
   const displayModel = selectedModel !== undefined ? selectedModel : currentModel;
@@ -61,6 +62,12 @@ export function ModelSelector({ type = "chat", provider, selectedModel, onModelC
 
   // Initial fetch on mount or when type/provider changes
   useEffect(() => {
+    // Skip if we already fetched for this provider (prevents flashing during polling)
+    if (lastFetchedProviderRef.current === provider && models.length > 0) {
+      return;
+    }
+    lastFetchedProviderRef.current = provider;
+
     setCurrentModel(""); // Clear stale model before fetch
     fetchModels().then((data) => {
       // Notify parent of the initial model (for controlled mode)
@@ -68,7 +75,7 @@ export function ModelSelector({ type = "chat", provider, selectedModel, onModelC
         onModelChange?.(data.current_model);
       }
     });
-  }, [fetchModels, type, selectedModel, onModelChange]);
+  }, [fetchModels, type, selectedModel, onModelChange, provider, models.length]);
 
   // Close dropdown when clicking outside
   useEffect(() => {

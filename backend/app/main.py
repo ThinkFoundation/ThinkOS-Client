@@ -1,3 +1,4 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -6,6 +7,12 @@ from fastapi.responses import JSONResponse
 
 from .db import is_db_initialized
 from .routes import router
+
+# Configure logging for all app modules
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 
 @asynccontextmanager

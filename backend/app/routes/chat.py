@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from openai import APIConnectionError
@@ -15,12 +16,83 @@ from .. import config
 from ..db.crud import create_conversation, add_message, update_conversation_title, get_conversation
 from ..events import event_manager, MemoryEvent, EventType
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
 
+def filter_memories_dynamically(memories: list[dict], max_results: int = 5) -> list[dict]:
+    """Filter memories using distance-based relevance.
+
+    Strategy:
+    - Sort by distance (best first)
+    - Include results within a range of the best match
+    - All match types (hybrid/keyword/vector) must pass distance check
+    - Adaptive limits based on best match quality
+    """
+    if not memories:
+        logger.info("No memories to filter")
+        return []
+
+    # Sort by distance (lowest/best first)
+    sorted_memories = sorted(memories, key=lambda m: m.get("distance") or 999)
+
+    # Log what we're working with
+    logger.info(f"Filtering {len(sorted_memories)} memories")
+    for m in sorted_memories[:5]:
+        dist = m.get('distance')
+        dist_str = f"{dist:.3f}" if dist is not None else "N/A"
+        rrf = m.get('rrf_score') or 0
+        rrf_str = f"{rrf:.4f}" if rrf else "N/A"
+        logger.info(f"  [{m.get('match_type', '?')}] {m.get('title', '')[:50]}... dist={dist_str} rrf={rrf_str}")
+
+    # Get the best distance
+    best_distance = sorted_memories[0].get("distance") if sorted_memories else None
+    if best_distance is None or best_distance >= 0.45:
+        logger.info(f"Best match too distant ({best_distance}), returning empty")
+        return []
+
+    # Calculate dynamic threshold: include results within range of best
+    # Tighter range for better matches, looser for weaker ones
+    if best_distance < 0.25:
+        # Excellent match: include results within +0.08
+        threshold = best_distance + 0.08
+        max_results = 5
+    elif best_distance < 0.35:
+        # Good match: include results within +0.06
+        threshold = best_distance + 0.06
+        max_results = 3
+    else:
+        # Marginal match: only include very close results
+        threshold = best_distance + 0.04
+        max_results = 2
+
+    logger.info(f"Best distance: {best_distance:.3f}, threshold: {threshold:.3f}, max: {max_results}")
+
+    filtered = []
+    for m in sorted_memories:
+        distance = m.get("distance")
+        match_type = m.get("match_type", "vector")
+
+        if distance is None:
+            continue
+
+        if distance <= threshold:
+            logger.info(f"  Including [{match_type}] (dist={distance:.3f}): {m.get('title', '')[:30]}")
+            filtered.append(m)
+        else:
+            logger.info(f"  Excluding [{match_type}] (dist={distance:.3f} > {threshold:.3f}): {m.get('title', '')[:30]}")
+
+    result = filtered[:max_results]
+    logger.info(f"Filtered to {len(result)} memories")
+    return result
+
+
 def format_memories_as_context(memories: list[dict], max_chars: int = 4000) -> str:
-    """Format retrieved memories into a context string for the LLM."""
+    """Format retrieved memories into a context string for the LLM.
+
+    Expects memories to be pre-filtered by filter_memories_dynamically.
+    """
     if not memories:
         return ""
 
@@ -28,12 +100,6 @@ def format_memories_as_context(memories: list[dict], max_chars: int = 4000) -> s
     total_chars = 0
 
     for memory in memories:
-        # Skip memories with low relevance (high distance)
-        # Allow FTS-only matches (distance=None) through
-        distance = memory.get("distance")
-        if distance is not None and distance > 0.85:
-            continue
-
         title = memory.get("title", "Untitled")
         content = memory.get("content", "")
 
@@ -95,26 +161,36 @@ async def chat(request: ChatRequest):
     context = ""
     sources = []
 
-    try:
-        # Preprocess query to improve semantic matching
-        processed_query = preprocess_query(request.message)
-        keyword_query = extract_keywords(request.message)
-        query_embedding = await get_embedding(processed_query)
-        similar_memories = await search_similar_memories(
-            query_embedding, limit=10, keyword_query=keyword_query
-        )
+    # Skip RAG for very short messages (< 10 chars)
+    if len(request.message.strip()) >= 10:
+        try:
+            # Preprocess query to improve semantic matching
+            processed_query = preprocess_query(request.message)
+            keyword_query = extract_keywords(request.message)
+            query_embedding = await get_embedding(processed_query)
+            similar_memories = await search_similar_memories(
+                query_embedding, limit=10, keyword_query=keyword_query
+            )
 
-        if similar_memories:
-            context = format_memories_as_context(similar_memories)
-            # Build sources list (include memories with distance < 0.85)
-            sources = [
-                {"id": m["id"], "title": m["title"], "url": m.get("url"), "distance": m.get("distance")}
-                for m in similar_memories
-                if m.get("distance") is None or m.get("distance", 1.0) < 0.85
-            ]
-    except Exception as e:
-        # RAG is an enhancement, not required - log and continue
-        print(f"RAG retrieval error: {e}")
+            if similar_memories:
+                # Filter using dynamic threshold
+                filtered_memories = filter_memories_dynamically(similar_memories)
+                context = format_memories_as_context(filtered_memories)
+                # Build sources list from filtered memories
+                sources = [
+                    {
+                        "id": m["id"],
+                        "title": m["title"],
+                        "url": m.get("url"),
+                        "distance": m.get("distance"),
+                        "match_type": m.get("match_type", "vector"),
+                        "rrf_score": m.get("rrf_score"),
+                    }
+                    for m in filtered_memories
+                ]
+        except Exception as e:
+            # RAG is an enhancement, not required - log and continue
+            logger.error(f"RAG retrieval error: {e}")
 
     # --- Get conversation history ---
     history = []
@@ -208,25 +284,35 @@ async def chat_stream(request: ChatRequest):
     context = ""
     sources = []
 
-    try:
-        # Preprocess query to improve semantic matching
-        processed_query = preprocess_query(request.message)
-        keyword_query = extract_keywords(request.message)
-        query_embedding = await get_embedding(processed_query)
-        similar_memories = await search_similar_memories(
-            query_embedding, limit=10, keyword_query=keyword_query
-        )
+    # Skip RAG for very short messages (< 10 chars)
+    if len(request.message.strip()) >= 10:
+        try:
+            # Preprocess query to improve semantic matching
+            processed_query = preprocess_query(request.message)
+            keyword_query = extract_keywords(request.message)
+            query_embedding = await get_embedding(processed_query)
+            similar_memories = await search_similar_memories(
+                query_embedding, limit=10, keyword_query=keyword_query
+            )
 
-        if similar_memories:
-            context = format_memories_as_context(similar_memories)
-            # Build sources list (include memories with distance < 0.85 or FTS-only matches)
-            sources = [
-                {"id": m["id"], "title": m["title"], "url": m.get("url"), "distance": m.get("distance")}
-                for m in similar_memories
-                if m.get("distance") is None or m.get("distance", 1.0) < 0.85
-            ]
-    except Exception as e:
-        print(f"RAG retrieval error: {e}")
+            if similar_memories:
+                # Filter using dynamic threshold
+                filtered_memories = filter_memories_dynamically(similar_memories)
+                context = format_memories_as_context(filtered_memories)
+                # Build sources list from filtered memories
+                sources = [
+                    {
+                        "id": m["id"],
+                        "title": m["title"],
+                        "url": m.get("url"),
+                        "distance": m.get("distance"),
+                        "match_type": m.get("match_type", "vector"),
+                        "rrf_score": m.get("rrf_score"),
+                    }
+                    for m in filtered_memories
+                ]
+        except Exception as e:
+            logger.error(f"RAG retrieval error: {e}")
 
     # Get conversation history
     history = []
@@ -256,7 +342,7 @@ async def chat_stream(request: ChatRequest):
             await add_message(conversation_id, "assistant", full_response, sources=sources, usage=usage_data)
 
             # Signal done with usage and context window info
-            done_data = {'type': 'done'}
+            done_data: dict = {'type': 'done'}
             if usage_data:
                 done_data['usage'] = usage_data
                 done_data['context_window'] = get_context_window(get_model())

@@ -8,7 +8,7 @@ interface ConversationContextType {
   allSources: SourceMemory[];
   isLoadingMessages: boolean;
   pendingMessage: string | null;
-  contextUsage: TokenUsage | null;  // Latest message only (for context window %)
+  estimatedTokens: number;  // Estimated conversation tokens (stable, grows with messages)
   billingUsage: TokenUsage | null;  // Cumulative (for cost tracking)
   contextWindow: number;
   selectConversation: (conversation: Conversation | null) => void;
@@ -18,42 +18,34 @@ interface ConversationContextType {
   updateMessage: (id: string | number, updates: Partial<ChatMessage>) => void;
   clearMessages: () => void;
   setPendingMessage: (message: string | null) => void;
-  updateUsage: (usage: TokenUsage | null, contextWindow?: number) => void;
+  updateContextWindow: (contextWindow: number) => void;
 }
 
 const ConversationContext = createContext<ConversationContextType | null>(null);
+
+// Estimate tokens from text (~4 chars per token is a common approximation)
+const SYSTEM_PROMPT_TOKENS = 80; // Approximate tokens for the system prompt
+
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
 
 export function ConversationProvider({ children }: { children: ReactNode }) {
   const [currentConversationId, setCurrentConversationId] = useState<number | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
-  const [contextUsage, setContextUsage] = useState<TokenUsage | null>(null);  // Latest only
   const [billingUsage, setBillingUsage] = useState<TokenUsage | null>(null);  // Cumulative
   const [contextWindow, setContextWindow] = useState(128000);
 
-  const updateUsage = useCallback((newUsage: TokenUsage | null, newContextWindow?: number) => {
-    if (newUsage) {
-      // Context usage = latest message only (for context window %)
-      setContextUsage(newUsage);
+  // Estimate conversation tokens from messages (stable, grows with conversation)
+  const estimatedTokens = useMemo(() => {
+    const messageTokens = messages.reduce((acc, msg) => acc + estimateTokens(msg.content), 0);
+    return SYSTEM_PROMPT_TOKENS + messageTokens;
+  }, [messages]);
 
-      // Billing usage = accumulate across conversation (for cost tracking)
-      setBillingUsage((prev) =>
-        prev
-          ? {
-              prompt_tokens: prev.prompt_tokens + newUsage.prompt_tokens,
-              completion_tokens: prev.completion_tokens + newUsage.completion_tokens,
-              total_tokens: prev.total_tokens + newUsage.total_tokens,
-            }
-          : newUsage
-      );
-    } else {
-      setContextUsage(null);
-      setBillingUsage(null);
-    }
-    if (newContextWindow) {
-      setContextWindow(newContextWindow);
-    }
+  const updateContextWindow = useCallback((newContextWindow: number) => {
+    setContextWindow(newContextWindow);
   }, []);
 
   const loadConversation = useCallback(async (conversationId: number) => {
@@ -70,24 +62,10 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
           }))
         );
 
-        // Get usage from messages
+        // Billing usage = sum of all assistant message tokens (for cost tracking)
         const assistantMessages = data.messages.filter(
           (m) => m.role === "assistant" && m.total_tokens
         );
-
-        // Context usage = last assistant message only (current context window state)
-        const lastAssistant = assistantMessages[assistantMessages.length - 1];
-        if (lastAssistant) {
-          setContextUsage({
-            prompt_tokens: lastAssistant.prompt_tokens || 0,
-            completion_tokens: lastAssistant.completion_tokens || 0,
-            total_tokens: lastAssistant.total_tokens || 0,
-          });
-        } else {
-          setContextUsage(null);
-        }
-
-        // Billing usage = sum of all (total tokens consumed)
         const totalBilling = assistantMessages.reduce(
           (acc, m) => ({
             prompt_tokens: acc.prompt_tokens + (m.prompt_tokens || 0),
@@ -110,7 +88,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Aggregate all sources from messages, deduplicated by id
+  // Aggregate all sources from conversation, deduplicated by id
   const allSources = useMemo(() => {
     const sourceMap = new Map<number, SourceMemory>();
     for (const msg of messages) {
@@ -133,7 +111,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       } else {
         setCurrentConversationId(null);
         setMessages([]);
-        setContextUsage(null);
         setBillingUsage(null);
       }
     },
@@ -143,7 +120,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   const startNewChat = useCallback(() => {
     setCurrentConversationId(null);
     setMessages([]);
-    setContextUsage(null);
     setBillingUsage(null);
   }, []);
 
@@ -169,7 +145,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         allSources,
         isLoadingMessages,
         pendingMessage,
-        contextUsage,
+        estimatedTokens,
         billingUsage,
         contextWindow,
         selectConversation,
@@ -179,7 +155,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         updateMessage,
         clearMessages,
         setPendingMessage,
-        updateUsage,
+        updateContextWindow,
       }}
     >
       {children}

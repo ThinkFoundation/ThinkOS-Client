@@ -57,10 +57,9 @@ def build_messages(
             "content": SYSTEM_PROMPT
         })
 
-    # Add conversation history (limit to last 10 messages)
+    # Add full conversation history
     if history:
-        recent_history = history[-10:]
-        for msg in recent_history:
+        for msg in history:
             messages.append({
                 "role": msg["role"],
                 "content": msg["content"]

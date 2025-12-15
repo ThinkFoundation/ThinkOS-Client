@@ -270,11 +270,18 @@ class NativeMessagingServer:
             )
 
             if memories:
-                # Filter by relevance (distance < 0.85) or FTS-only matches (distance=None)
-                relevant_memories = [
-                    m for m in memories
-                    if m.get("distance") is None or m.get("distance", 1.0) < 0.85
-                ]
+                # Filter using dynamic threshold based on best match quality
+                with_distance = [m for m in memories if m.get("distance") is not None]
+                relevant_memories = []
+
+                if with_distance:
+                    with_distance.sort(key=lambda m: m["distance"])
+                    best_distance = with_distance[0]["distance"]
+
+                    # Only include if best match is good enough (< 0.25)
+                    if best_distance < 0.25:
+                        threshold = best_distance + 0.1
+                        relevant_memories = [m for m in with_distance if m["distance"] <= threshold][:5]
 
                 # Build sources list for the response
                 sources = [

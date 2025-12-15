@@ -3,23 +3,23 @@ import { cn } from "@/lib/utils";
 import type { TokenUsage } from "@/types/chat";
 
 interface ContextUsageIndicatorProps {
-  contextUsage: TokenUsage | null;  // Latest message (for context window %)
+  estimatedTokens: number;  // Estimated conversation tokens
   billingUsage: TokenUsage | null;  // Cumulative (for session totals)
   contextWindow: number;
   className?: string;
 }
 
 export function ContextUsageIndicator({
-  contextUsage,
+  estimatedTokens,
   billingUsage,
   contextWindow,
   className,
 }: ContextUsageIndicatorProps) {
   const [showPopover, setShowPopover] = useState(false);
 
-  if (!contextUsage) return null;
+  if (estimatedTokens === 0) return null;
 
-  const percentage = Math.min((contextUsage.total_tokens / contextWindow) * 100, 100);
+  const percentage = Math.min((estimatedTokens / contextWindow) * 100, 100);
 
   // Color based on usage level
   const getStrokeColor = () => {
@@ -78,9 +78,9 @@ export function ContextUsageIndicator({
           <div className="text-xs font-medium mb-2">Context Window</div>
           <div className="space-y-1.5 text-xs">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Current:</span>
+              <span className="text-muted-foreground">Conversation:</span>
               <span className="font-mono font-medium">
-                {contextUsage.total_tokens.toLocaleString()} / {contextWindow.toLocaleString()}
+                ~{estimatedTokens.toLocaleString()} / {contextWindow.toLocaleString()}
               </span>
             </div>
             <div className="flex justify-between text-muted-foreground">

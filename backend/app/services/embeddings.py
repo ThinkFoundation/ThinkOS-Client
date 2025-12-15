@@ -18,9 +18,66 @@ def get_current_embedding_model() -> str:
     return f"ollama:{config.settings.ollama_embedding_model}"
 
 
-# Maximum characters to embed (roughly 6000 tokens at ~4 chars/token)
-# Most embedding models support 8192 tokens, this gives us safety margin
-MAX_EMBEDDING_CHARS = 24000
+# Context windows for embedding models (in tokens)
+# NOTE: Ollama v0.13+ has drastically smaller limits than documented
+EMBEDDING_MODEL_CONTEXT = {
+    "mxbai-embed-large": 256,        # Documented 8192, actual ~256
+    "snowflake-arctic-embed": 256,   # Very conservative
+    # OpenAI (these actually work as documented)
+    "text-embedding-3-small": 8191,
+    "text-embedding-3-large": 8191,
+    "text-embedding-ada-002": 8191,
+}
+DEFAULT_EMBEDDING_CONTEXT = 256  # Very conservative for unknown models
+CHARS_PER_TOKEN = 4
+
+
+def chunk_text(text: str, max_tokens: int) -> list[str]:
+    """Split text into chunks that fit within token limit."""
+    max_chars = (max_tokens - 50) * CHARS_PER_TOKEN  # Safety margin
+    if len(text) <= max_chars:
+        return [text]
+
+    chunks = []
+    paragraphs = text.split("\n\n")
+    current_chunk = ""
+
+    for para in paragraphs:
+        if len(current_chunk) + len(para) + 2 <= max_chars:
+            current_chunk += ("\n\n" if current_chunk else "") + para
+        else:
+            if current_chunk:
+                chunks.append(current_chunk)
+                current_chunk = ""
+            if len(para) > max_chars:
+                # Split long paragraphs by sentences
+                sentences = para.replace(". ", ".\n").split("\n")
+                for sent in sentences:
+                    if len(current_chunk) + len(sent) + 1 <= max_chars:
+                        current_chunk += (" " if current_chunk else "") + sent
+                    else:
+                        if current_chunk:
+                            chunks.append(current_chunk)
+                            current_chunk = ""
+                        # Handle very long sentences by hard-splitting
+                        while len(sent) > max_chars:
+                            chunks.append(sent[:max_chars])
+                            sent = sent[max_chars:]
+                        if sent:
+                            current_chunk = sent
+            else:
+                current_chunk = para
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    return chunks
+
+
+def average_embeddings(embeddings: list[list[float]]) -> list[float]:
+    """Average multiple embedding vectors."""
+    arr = np.array(embeddings)
+    return arr.mean(axis=0).tolist()
 
 
 async def get_embedding(text: str) -> list[float]:
@@ -29,14 +86,31 @@ async def get_embedding(text: str) -> list[float]:
     if not text or not text.strip():
         raise ValueError("Cannot generate embedding for empty text")
 
-    # Truncate very long text to avoid exceeding model limits
-    if len(text) > MAX_EMBEDDING_CHARS:
-        text = text[:MAX_EMBEDDING_CHARS]
-
+    # Get context limit for current model
     if config.settings.embedding_provider == "openai":
-        return await _get_openai_embedding(text)
+        model = config.settings.openai_embedding_model
     else:
-        return await _get_ollama_embedding(text)
+        model = config.settings.ollama_embedding_model
+
+    base_name = model.split(":")[0]
+    context_tokens = EMBEDDING_MODEL_CONTEXT.get(base_name, DEFAULT_EMBEDDING_CONTEXT)
+
+    # Chunk text if needed
+    chunks = chunk_text(text, context_tokens)
+
+    # Get embeddings for all chunks in parallel
+    if config.settings.embedding_provider == "openai":
+        tasks = [_get_openai_embedding(chunk) for chunk in chunks]
+    else:
+        tasks = [_get_ollama_embedding(chunk) for chunk in chunks]
+
+    embeddings = await asyncio.gather(*tasks)
+
+    # Average embeddings if multiple chunks
+    if len(embeddings) == 1:
+        return embeddings[0]
+
+    return average_embeddings(list(embeddings))
 
 
 async def _get_ollama_embedding(text: str, retries: int = 3) -> list[float]:

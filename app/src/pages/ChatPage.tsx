@@ -27,7 +27,7 @@ export default function ChatPage() {
     allSources,
     isLoadingMessages,
     pendingMessage,
-    contextUsage,
+    estimatedTokens,
     billingUsage,
     contextWindow,
     setCurrentConversationId,
@@ -36,7 +36,7 @@ export default function ChatPage() {
     selectConversation,
     startNewChat,
     setPendingMessage,
-    updateUsage,
+    updateContextWindow,
   } = useConversation();
 
   const { conversations } = useConversations();
@@ -152,9 +152,9 @@ export default function ChatPage() {
                 updateMessage(assistantMessageId, { content });
               } else if (data.type === "done") {
                 updateMessage(assistantMessageId, { isStreaming: false });
-                // Update usage from stream response
-                if (data.usage) {
-                  updateUsage(data.usage, data.context_window);
+                // Update context window from stream response
+                if (data.context_window) {
+                  updateContextWindow(data.context_window);
                 }
               } else if (data.type === "error") {
                 updateMessage(assistantMessageId, {
@@ -180,8 +180,8 @@ export default function ChatPage() {
             updateMessage(assistantMessageId, { content });
           } else if (data.type === "done") {
             updateMessage(assistantMessageId, { isStreaming: false });
-            if (data.usage) {
-              updateUsage(data.usage, data.context_window);
+            if (data.context_window) {
+              updateContextWindow(data.context_window);
             }
           }
         } catch {
@@ -200,7 +200,7 @@ export default function ChatPage() {
       // Clear pending conversation ref
       pendingConversationRef.current = null;
     }
-  }, [addMessage, updateMessage, setCurrentConversationId, updateUsage]);
+  }, [addMessage, updateMessage, setCurrentConversationId, updateContextWindow]);
 
   // Handler for manual chat input
   const handleChat = useCallback(() => {
@@ -267,7 +267,7 @@ export default function ChatPage() {
                 />
               </div>
               <ContextUsageIndicator
-                contextUsage={contextUsage}
+                estimatedTokens={estimatedTokens}
                 billingUsage={billingUsage}
                 contextWindow={contextWindow}
               />

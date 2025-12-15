@@ -207,13 +207,13 @@ OPENAI_EMBEDDING_MODELS = [
 # Known Ollama embedding models
 OLLAMA_EMBEDDING_MODELS = [
     "mxbai-embed-large",
-    "all-minilm",
     "snowflake-arctic-embed",
 ]
 
-# Models that should never be shown (known to be broken)
+# Models that should never be shown (known to be broken or impractical)
 # nomic-embed-text crashes with EOF on content >5000 chars
-BLOCKED_EMBEDDING_MODELS = ["nomic-embed-text"]
+# all-minilm has 256 token context - too small for real documents
+BLOCKED_EMBEDDING_MODELS = ["nomic-embed-text", "all-minilm"]
 
 
 @router.get("/settings/models")
