@@ -112,13 +112,13 @@ export default function SetupWizard({ onComplete }: Props) {
       if (res.ok) {
         const data = await res.json();
         const models = data.models?.map((m: { name: string }) => m.name) || [];
-        const hasEmbedding = models.some((n: string) => n.startsWith('nomic-embed-text'));
+        const hasEmbedding = models.some((n: string) => n.startsWith('mxbai-embed-large'));
 
         if (!hasEmbedding && window.electronAPI) {
           setStep('pulling');
           setProgress(0);
           setStatusText('Downloading embedding model...');
-          const result = await window.electronAPI.pullModel('nomic-embed-text');
+          const result = await window.electronAPI.pullModel('mxbai-embed-large');
           if (!result.success) {
             setError(result.error || 'Embedding model download failed');
             setStep('choose');
@@ -171,7 +171,7 @@ export default function SetupWizard({ onComplete }: Props) {
     setProgress(0);
     setStatusText('Downloading embedding model...');
 
-    const embedResult = await window.electronAPI.pullModel('nomic-embed-text');
+    const embedResult = await window.electronAPI.pullModel('mxbai-embed-large');
 
     if (!embedResult.success) {
       setError(embedResult.error || 'Embedding model download failed');
