@@ -1,5 +1,18 @@
 # think-app
 
+## 0.3.1
+
+### Patch Changes
+
+- 586e850: fix(app): show reembed dialog when embedding model changes regardless of affected count
+- af401ff: fix(app): use mxbai-embed-large instead of nomic-embed-text in SetupWizard
+
+  The SetupWizard was still hardcoded to download nomic-embed-text, which is now
+  blocked due to crashes on content >5000 chars. Updated to use mxbai-embed-large
+  to match the backend's default embedding model.
+
+- 97ff418: fix(backend): correct API route order for stale-embeddings-count endpoint
+
 ## 0.3.0
 
 ### Minor Changes
