@@ -126,6 +126,14 @@ async def search_memories_semantic(
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
 
+@router.get("/memories/stale-embeddings-count")
+async def get_stale_embeddings_count():
+    """Get count of memories that need re-embedding."""
+    embedding_model = get_current_embedding_model()
+    count = await count_memories_needing_reembedding(embedding_model)
+    return {"count": count}
+
+
 @router.get("/memories/{memory_id}")
 async def read_memory(memory_id: int):
     memory = await get_memory(memory_id)
@@ -255,14 +263,6 @@ async def generate_embeddings():
             failed += 1
 
     return {"processed": processed, "failed": failed, "total": len(memories)}
-
-
-@router.get("/memories/stale-embeddings-count")
-async def get_stale_embeddings_count():
-    """Get count of memories that need re-embedding."""
-    embedding_model = get_current_embedding_model()
-    count = await count_memories_needing_reembedding(embedding_model)
-    return {"count": count}
 
 
 @router.post("/memories/regenerate-embeddings")
