@@ -10,6 +10,19 @@ interface Props {
   onUnlock: () => void;
 }
 
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  let greeting: string;
+  if (hour < 12) {
+    greeting = "Good morning.";
+  } else if (hour < 18) {
+    greeting = "Good afternoon.";
+  } else {
+    greeting = "Good evening.";
+  }
+  return greeting;
+}
+
 export default function LockScreen({ needsSetup, onUnlock }: Props) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -126,28 +139,59 @@ export default function LockScreen({ needsSetup, onUnlock }: Props) {
             <div className="space-y-3">
               {needsSetup ? (
                 <>
+                    <div className="relative">
+                      <h1 className="text-2xl font-light mb-2">{getGreeting()}</h1>
+                      <p className="text-sm">
+                        To get started, set a secure password. Choose wisely, as it can not be reset.
+                      </p>
+                    </div>
+                    <div className="relative">
+                      <Input
+                        type="password"
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        disabled={loading || success}
+                        className="text-center pl-10 pr-10"
+                      />
+                    </div>
+                    <div className="relative">
+                      <Input
+                        type="password"
+                        placeholder="••••••••"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && !loading && handleSetup()}
+                        disabled={loading || success}
+                        className="text-center pl-10 pr-10"
+                      />
+                      <button
+                        onClick={handleSetup}
+                        disabled={loading || success}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+                      >
+                        {loading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <ArrowRight className="h-4 w-4" />
+                        )}
+                      </button>
+                  </div>
+                </>
+              ) : (
                   <div className="relative">
                     <Input
                       type="password"
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      disabled={loading || success}
-                      className="text-center pl-10 pr-10"
-                    />
-                  </div>
-                  <div className="relative">
-                    <Input
-                      type="password"
-                      placeholder="••••••••"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && !loading && handleSetup()}
+                      onKeyDown={(e) => e.key === 'Enter' && !loading && handleUnlock()}
+                      autoFocus
                       disabled={loading || success}
                       className="text-center pl-10 pr-10"
                     />
                     <button
-                      onClick={handleSetup}
+                      onClick={handleUnlock}
                       disabled={loading || success}
                       className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
                     >
@@ -157,31 +201,6 @@ export default function LockScreen({ needsSetup, onUnlock }: Props) {
                         <ArrowRight className="h-4 w-4" />
                       )}
                     </button>
-                  </div>
-                </>
-              ) : (
-                <div className="relative">
-                  <Input
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && !loading && handleUnlock()}
-                    autoFocus
-                    disabled={loading || success}
-                    className="text-center pl-10 pr-10"
-                  />
-                  <button
-                    onClick={handleUnlock}
-                    disabled={loading || success}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
-                  >
-                    {loading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <ArrowRight className="h-4 w-4" />
-                    )}
-                  </button>
                 </div>
               )}
             </div>
