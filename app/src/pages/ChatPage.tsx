@@ -1,12 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { FileText, Pin, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { ChatInput } from "@/components/ChatInput";
 import { ChatMessageList } from "@/components/ChatMessageList";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { ChatSourcesPanel } from "@/components/ChatSourcesPanel";
 import { ContextUsageIndicator } from "@/components/ContextUsageIndicator";
+import { Button } from "@/components/ui/button";
 import { useConversation } from "@/contexts/ConversationContext";
 import { useConversations } from "@/hooks/useConversations";
+import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/types/chat";
 
 export default function ChatPage() {
@@ -40,13 +43,34 @@ export default function ChatPage() {
     updateContextWindow,
   } = useConversation();
 
-  const { conversations } = useConversations();
+  const { conversations, deleteConversation, togglePinConversation } = useConversations();
 
   // Wrapper for starting new chat that prevents auto-load from immediately re-selecting
   const handleStartNewChat = useCallback(() => {
     wantsNewChatRef.current = true;
     startNewChat();
   }, [startNewChat]);
+
+  // Get current conversation details
+  const currentConversation = useMemo(() => {
+    if (!currentConversationId) return null;
+    return conversations.find((c) => c.id === currentConversationId) || null;
+  }, [currentConversationId, conversations]);
+
+  // Handle delete conversation
+  const handleDeleteConversation = useCallback(async () => {
+    if (!currentConversationId) return;
+    const success = await deleteConversation(currentConversationId);
+    if (success) {
+      handleStartNewChat();
+    }
+  }, [currentConversationId, deleteConversation, handleStartNewChat]);
+
+  // Handle toggle pin
+  const handleTogglePin = useCallback(async () => {
+    if (!currentConversation) return;
+    await togglePinConversation(currentConversation.id, !currentConversation.pinned);
+  }, [currentConversation, togglePinConversation]);
 
   // Core chat submission logic
   const submitChat = useCallback(async (messageText: string, conversationId: number | null) => {
@@ -253,6 +277,47 @@ export default function ChatPage() {
 
       {/* Chat content */}
       <div className="flex-1 flex flex-col">
+        {/* Title bar - shown when a conversation is selected */}
+        {currentConversation && (
+          <div className="flex-none border-b bg-background/50 backdrop-blur-sm">
+            <div className="flex items-center gap-3 px-4 py-3">
+              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="text-sm text-muted-foreground truncate">
+                  {currentConversation.title || "New conversation"}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={handleTogglePin}
+                  title={currentConversation.pinned ? "Unpin conversation" : "Pin conversation"}
+                >
+                  <Pin
+                    className={cn(
+                      "h-4 w-4",
+                      currentConversation.pinned
+                        ? "text-primary fill-primary"
+                        : "text-muted-foreground"
+                    )}
+                  />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={handleDeleteConversation}
+                  title="Delete conversation"
+                >
+                  <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Messages area */}
         {isLoadingMessages ? (
           <div className="flex-1 flex items-center justify-center">
