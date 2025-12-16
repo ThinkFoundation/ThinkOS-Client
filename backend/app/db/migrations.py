@@ -319,6 +319,26 @@ def migration_012(conn: Connection) -> None:
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_conversations_pinned ON conversations(pinned)"))
 
 
+@migration(13, "Add embedding_summary column to memories")
+def migration_013(conn: Connection) -> None:
+    """Add embedding_summary for structured semantic search summaries."""
+    result = conn.execute(text("PRAGMA table_info(memories)")).fetchall()
+    columns = [row[1] for row in result]
+
+    if "embedding_summary" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN embedding_summary TEXT"))
+
+
+@migration(14, "Add processing_attempts column to memories")
+def migration_014(conn: Connection) -> None:
+    """Track failed processing attempts to prevent infinite retry loops."""
+    result = conn.execute(text("PRAGMA table_info(memories)")).fetchall()
+    columns = [row[1] for row in result]
+
+    if "processing_attempts" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN processing_attempts INTEGER DEFAULT 0"))
+
+
 # --- Migration runner ---
 
 def run_migrations(conn: Connection) -> list[tuple[int, str]]:

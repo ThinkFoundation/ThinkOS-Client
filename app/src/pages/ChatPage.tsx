@@ -12,6 +12,7 @@ import type { ChatMessage } from "@/types/chat";
 export default function ChatPage() {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [followupSuggestions, setFollowupSuggestions] = useState<string[]>([]);
   const isStartingNewChatRef = useRef(false);
   const wantsNewChatRef = useRef(false);
 
@@ -54,6 +55,9 @@ export default function ChatPage() {
     // Clear new chat flag since user is now sending a message
     wantsNewChatRef.current = false;
 
+    // Clear previous follow-up suggestions when sending a new message
+    setFollowupSuggestions([]);
+
     // FIX: Handle conversation ID race condition
     // If no conversation ID and another message is already creating one, wait for it
     let effectiveConversationId = conversationId;
@@ -87,15 +91,15 @@ export default function ChatPage() {
     // Set up pending conversation promise if this is a new conversation
     let resolveConversation: (id: number) => void = () => {};
     if (!effectiveConversationId) {
-      const pending = {
-        promise: null as unknown as Promise<number>,
-        resolve: null as unknown as (id: number) => void,
-      };
-      pending.promise = new Promise<number>((resolve) => {
-        pending.resolve = resolve;
+      let pendingResolve: (id: number) => void;
+      const pendingPromise = new Promise<number>((resolve) => {
+        pendingResolve = resolve;
         resolveConversation = resolve;
       });
-      pendingConversationRef.current = pending;
+      pendingConversationRef.current = {
+        promise: pendingPromise,
+        resolve: pendingResolve!,
+      };
     }
 
     try {
@@ -115,78 +119,90 @@ export default function ChatPage() {
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No reader available");
 
-      const decoder = new TextDecoder();
-      let content = "";
-      // FIX: Buffer for incomplete SSE lines (prevents dropped JSON when split across chunks)
-      let sseBuffer = "";
+      try {
+        const decoder = new TextDecoder();
+        let content = "";
+        // FIX: Buffer for incomplete SSE lines (prevents dropped JSON when split across chunks)
+        let sseBuffer = "";
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        // Append new chunk to buffer
-        sseBuffer += decoder.decode(value, { stream: true });
-        const lines = sseBuffer.split("\n");
+          // Append new chunk to buffer
+          sseBuffer += decoder.decode(value, { stream: true });
+          const lines = sseBuffer.split("\n");
 
-        // Keep the last potentially incomplete line in buffer
-        sseBuffer = lines.pop() || "";
+          // Keep the last potentially incomplete line in buffer
+          sseBuffer = lines.pop() || "";
 
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(line.slice(6));
 
-              if (data.type === "meta") {
-                // Update conversation ID and sources
-                if (data.conversation_id && !effectiveConversationId) {
-                  setCurrentConversationId(data.conversation_id);
-                  // Resolve pending conversation promise for any waiting messages
-                  resolveConversation(data.conversation_id);
+                if (data.type === "meta") {
+                  // Update conversation ID and sources
+                  if (data.conversation_id && !effectiveConversationId) {
+                    setCurrentConversationId(data.conversation_id);
+                    // Resolve pending conversation promise for any waiting messages
+                    resolveConversation(data.conversation_id);
+                  }
+                  updateMessage(assistantMessageId, {
+                    sources: data.sources || [],
+                    searched: data.searched || false,
+                  });
+                } else if (data.type === "token") {
+                  content += data.content;
+                  updateMessage(assistantMessageId, { content });
+                } else if (data.type === "done") {
+                  updateMessage(assistantMessageId, { isStreaming: false });
+                  setIsLoading(false); // Stop loading before follow-ups arrive
+                  // Update context window from stream response
+                  if (data.context_window) {
+                    updateContextWindow(data.context_window);
+                  }
+                } else if (data.type === "error") {
+                  updateMessage(assistantMessageId, {
+                    content: data.message,
+                    error: true,
+                    isStreaming: false,
+                  });
+                } else if (data.type === "followups") {
+                  // LLM-generated follow-up suggestions
+                  if (data.suggestions && Array.isArray(data.suggestions)) {
+                    setFollowupSuggestions(data.suggestions);
+                  }
                 }
-                updateMessage(assistantMessageId, {
-                  sources: data.sources || [],
-                  searched: data.searched || false,
-                });
-              } else if (data.type === "token") {
-                content += data.content;
-                updateMessage(assistantMessageId, { content });
-              } else if (data.type === "done") {
-                updateMessage(assistantMessageId, { isStreaming: false });
-                // Update context window from stream response
-                if (data.context_window) {
-                  updateContextWindow(data.context_window);
-                }
-              } else if (data.type === "error") {
-                updateMessage(assistantMessageId, {
-                  content: data.message,
-                  error: true,
-                  isStreaming: false,
-                });
+              } catch (e) {
+                // Log parse errors for debugging (was silently swallowed)
+                console.warn("Failed to parse SSE data:", line.slice(6), e);
               }
-            } catch (e) {
-              // Log parse errors for debugging (was silently swallowed)
-              console.warn("Failed to parse SSE data:", line.slice(6), e);
             }
           }
         }
-      }
 
-      // Process any remaining data in buffer
-      if (sseBuffer.startsWith("data: ")) {
-        try {
-          const data = JSON.parse(sseBuffer.slice(6));
-          if (data.type === "token") {
-            content += data.content;
-            updateMessage(assistantMessageId, { content });
-          } else if (data.type === "done") {
-            updateMessage(assistantMessageId, { isStreaming: false });
-            if (data.context_window) {
-              updateContextWindow(data.context_window);
+        // Process any remaining data in buffer
+        if (sseBuffer.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(sseBuffer.slice(6));
+            if (data.type === "token") {
+              content += data.content;
+              updateMessage(assistantMessageId, { content });
+            } else if (data.type === "done") {
+              updateMessage(assistantMessageId, { isStreaming: false });
+              setIsLoading(false);
+              if (data.context_window) {
+                updateContextWindow(data.context_window);
+              }
             }
+          } catch {
+            // Ignore incomplete final chunk
           }
-        } catch {
-          // Ignore incomplete final chunk
         }
+      } finally {
+        // Always close the reader to prevent resource leaks
+        reader.cancel().catch(() => {});
       }
     } catch (err) {
       updateMessage(assistantMessageId, {
@@ -247,6 +263,7 @@ export default function ChatPage() {
             messages={messages}
             isLoading={isLoading}
             onSendMessage={(msg) => submitChat(msg, currentConversationId)}
+            followupSuggestions={followupSuggestions}
           />
         )}
 

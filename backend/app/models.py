@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, Text, DateTime, LargeBinary, ForeignKey
+from sqlalchemy import String, Text, DateTime, LargeBinary, ForeignKey, Integer
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -17,8 +17,10 @@ class Memory(Base):
     original_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     embedding: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    processing_attempts: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     tags: Mapped[list["MemoryTag"]] = relationship(back_populates="memory", cascade="all, delete-orphan")

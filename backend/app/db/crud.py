@@ -109,25 +109,33 @@ async def get_memories(
             query = query.order_by(Memory.created_at.desc()).offset(offset).limit(limit)
             memories = session.execute(query).scalars().all()
 
-            # Get tags for each memory
+            if not memories:
+                return [], total
+
+            # Batch fetch tags for all memories in a single query
+            memory_ids = [m.id for m in memories]
+            all_memory_tags = session.execute(
+                select(MemoryTag, Tag)
+                .join(Tag, MemoryTag.tag_id == Tag.id)
+                .where(MemoryTag.memory_id.in_(memory_ids))
+            ).all()
+
+            # Build lookup dict: memory_id -> list of tag dicts
+            tags_by_memory: dict[int, list[dict]] = {mid: [] for mid in memory_ids}
+            for mt, tag in all_memory_tags:
+                tags_by_memory[mt.memory_id].append({
+                    "id": tag.id, "name": tag.name, "source": mt.source
+                })
+
             result = []
             for m in memories:
-                memory_tags = session.execute(
-                    select(MemoryTag, Tag)
-                    .join(Tag, MemoryTag.tag_id == Tag.id)
-                    .where(MemoryTag.memory_id == m.id)
-                ).all()
-                tags = [
-                    {"id": tag.id, "name": tag.name, "source": mt.source}
-                    for mt, tag in memory_tags
-                ]
                 result.append({
                     "id": m.id,
                     "type": m.type,
                     "url": m.url,
                     "title": m.title,
                     "summary": m.summary,
-                    "tags": tags,
+                    "tags": tags_by_memory.get(m.id, []),
                     "created_at": m.created_at.isoformat(),
                 })
 
@@ -263,6 +271,20 @@ async def update_memory_summary(memory_id: int, summary: str) -> bool:
     return await run_sync(_update)
 
 
+async def update_memory_embedding_summary(memory_id: int, embedding_summary: str) -> bool:
+    """Update embedding summary for a specific memory."""
+    def _update():
+        with get_session_maker()() as session:
+            memory = session.get(Memory, memory_id)
+            if not memory:
+                return False
+            memory.embedding_summary = embedding_summary
+            session.commit()
+            return True
+
+    return await run_sync(_update)
+
+
 async def update_memory_title(memory_id: int, title: str) -> bool:
     """Update title for a specific memory."""
     def _update():
@@ -296,6 +318,57 @@ async def get_memories_without_embeddings() -> list[dict]:
     return await run_sync(_get)
 
 
+async def count_memories_without_embedding_summary() -> int:
+    """Count memories that don't have embedding_summary yet."""
+    def _count():
+        with get_session_maker()() as session:
+            count = session.execute(
+                select(func.count()).select_from(Memory).where(
+                    Memory.embedding_summary.is_(None)
+                )
+            ).scalar()
+            return count or 0
+
+    return await run_sync(_count)
+
+
+async def get_memories_without_embedding_summary(limit: int = 10) -> list[dict]:
+    """Get memories that don't have embedding_summary yet and haven't failed too many times."""
+    def _get():
+        with get_session_maker()() as session:
+            # Skip memories that have failed 3+ times to prevent infinite retry loops
+            memories = session.execute(
+                select(Memory).where(
+                    Memory.embedding_summary.is_(None) &
+                    ((Memory.processing_attempts < 3) | (Memory.processing_attempts.is_(None)))
+                ).limit(limit)
+            ).scalars().all()
+            return [
+                {
+                    "id": m.id,
+                    "title": m.title,
+                    "content": m.content,
+                }
+                for m in memories
+            ]
+
+    return await run_sync(_get)
+
+
+async def increment_processing_attempts(memory_id: int) -> bool:
+    """Increment the processing_attempts counter for a memory."""
+    def _increment():
+        with get_session_maker()() as session:
+            memory = session.get(Memory, memory_id)
+            if not memory:
+                return False
+            memory.processing_attempts = (memory.processing_attempts or 0) + 1
+            session.commit()
+            return True
+
+    return await run_sync(_increment)
+
+
 async def count_memories_with_embeddings() -> int:
     """Count memories that have embeddings."""
     def _count():
@@ -309,17 +382,20 @@ async def count_memories_with_embeddings() -> int:
 
 
 async def count_memories_needing_reembedding(current_model: str) -> int:
-    """Count memories that need embedding (no embedding or stale embedding)."""
+    """Count memories that need embedding and have embedding_summary ready."""
     def _count():
         with get_session_maker()() as session:
             # Count memories that:
-            # 1. Have no embedding at all (embedding IS NULL), OR
-            # 2. Have embeddings but embedding_model != current_model (stale)
+            # 1. Have embedding_summary (required for quality embeddings)
+            # 2. AND either no embedding or stale embedding
             count = session.execute(
                 select(func.count()).select_from(Memory).where(
-                    (Memory.embedding.is_(None)) |
-                    ((Memory.embedding.is_not(None)) &
-                     ((Memory.embedding_model != current_model) | (Memory.embedding_model.is_(None))))
+                    Memory.embedding_summary.is_not(None) &
+                    (
+                        (Memory.embedding.is_(None)) |
+                        ((Memory.embedding.is_not(None)) &
+                         ((Memory.embedding_model != current_model) | (Memory.embedding_model.is_(None))))
+                    )
                 )
             ).scalar()
             return count or 0
@@ -327,15 +403,57 @@ async def count_memories_needing_reembedding(current_model: str) -> int:
     return await run_sync(_count)
 
 
+async def count_memories_needing_processing(current_model: str) -> dict:
+    """Count memories needing summary generation and/or embedding.
+
+    Returns dict with:
+    - need_summary: Memories without embedding_summary (will need both summary + embedding)
+    - need_embedding: Memories with embedding_summary but needing (re)embedding
+    - total: Sum of both (total operations needed)
+    """
+    def _count():
+        with get_session_maker()() as session:
+            # Count memories without embedding_summary
+            need_summary = session.execute(
+                select(func.count()).select_from(Memory).where(
+                    Memory.embedding_summary.is_(None)
+                )
+            ).scalar() or 0
+
+            # Count memories that have embedding_summary but need (re)embedding
+            need_embedding = session.execute(
+                select(func.count()).select_from(Memory).where(
+                    Memory.embedding_summary.is_not(None) &
+                    (
+                        (Memory.embedding.is_(None)) |
+                        ((Memory.embedding.is_not(None)) &
+                         ((Memory.embedding_model != current_model) | (Memory.embedding_model.is_(None))))
+                    )
+                )
+            ).scalar() or 0
+
+            return {
+                "need_summary": need_summary,
+                "need_embedding": need_embedding,
+                "total": need_summary + need_embedding,
+            }
+
+    return await run_sync(_count)
+
+
 async def get_memories_needing_reembedding(current_model: str, limit: int = 10) -> list[dict]:
-    """Get memories that need embedding (no embedding or stale embedding)."""
+    """Get memories that need embedding and have embedding_summary ready."""
     def _get():
         with get_session_maker()() as session:
+            # Only get memories that have embedding_summary (required for quality embeddings)
             memories = session.execute(
                 select(Memory).where(
-                    (Memory.embedding.is_(None)) |
-                    ((Memory.embedding.is_not(None)) &
-                     ((Memory.embedding_model != current_model) | (Memory.embedding_model.is_(None))))
+                    Memory.embedding_summary.is_not(None) &
+                    (
+                        (Memory.embedding.is_(None)) |
+                        ((Memory.embedding.is_not(None)) &
+                         ((Memory.embedding_model != current_model) | (Memory.embedding_model.is_(None))))
+                    )
                 ).limit(limit)
             ).scalars().all()
             return [
@@ -343,6 +461,7 @@ async def get_memories_needing_reembedding(current_model: str, limit: int = 10) 
                     "id": m.id,
                     "title": m.title,
                     "content": m.content,
+                    "embedding_summary": m.embedding_summary,
                 }
                 for m in memories
             ]
@@ -545,16 +664,42 @@ async def get_conversations(limit: int = 50, offset: int = 0) -> list[dict]:
                 .limit(limit)
             ).all()
 
+            if not conversations:
+                return []
+
+            # Batch fetch last messages for all conversations in a single query
+            conv_ids = [conv.id for conv, _ in conversations]
+
+            # Subquery to get the max created_at for each conversation
+            from sqlalchemy import and_
+            last_msg_subq = (
+                select(
+                    Message.conversation_id,
+                    func.max(Message.created_at).label("max_created_at")
+                )
+                .where(Message.conversation_id.in_(conv_ids))
+                .group_by(Message.conversation_id)
+                .subquery()
+            )
+
+            # Get the actual messages matching the max created_at
+            last_messages_query = (
+                select(Message)
+                .join(
+                    last_msg_subq,
+                    and_(
+                        Message.conversation_id == last_msg_subq.c.conversation_id,
+                        Message.created_at == last_msg_subq.c.max_created_at
+                    )
+                )
+            )
+            last_messages = session.execute(last_messages_query).scalars().all()
+
+            # Build lookup dict
+            last_message_by_conv = {msg.conversation_id: msg.content[:100] for msg in last_messages}
+
             result = []
             for conv, message_count in conversations:
-                # Get last message for preview
-                last_message = session.execute(
-                    select(Message)
-                    .where(Message.conversation_id == conv.id)
-                    .order_by(Message.created_at.desc())
-                    .limit(1)
-                ).scalars().first()
-
                 result.append({
                     "id": conv.id,
                     "title": conv.title,
@@ -562,7 +707,7 @@ async def get_conversations(limit: int = 50, offset: int = 0) -> list[dict]:
                     "created_at": conv.created_at.isoformat(),
                     "updated_at": conv.updated_at.isoformat(),
                     "message_count": message_count,
-                    "last_message": last_message.content[:100] if last_message else None,
+                    "last_message": last_message_by_conv.get(conv.id),
                 })
 
             return result

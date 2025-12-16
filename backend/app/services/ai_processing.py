@@ -4,10 +4,13 @@ import json
 import logging
 
 from .ai import get_client, get_model
+from .embeddings import get_embedding, get_current_embedding_model
 from ..db.crud import (
     get_memory,
     update_memory_summary,
+    update_memory_embedding_summary,
     update_memory_title,
+    update_memory_embedding,
     add_tags_to_memory,
     get_all_tags,
     update_conversation_title,
@@ -137,17 +140,61 @@ Tags:"""
             return [str(t).strip().lower() for t in tags[:5] if t]
         return []
     except json.JSONDecodeError:
-        logger.error(f"Failed to parse tags response: {response.choices[0].message.content if response.choices else 'no response'}")
+        response_text = response.choices[0].message.content if response and response.choices else 'no response'
+        logger.error(f"Failed to parse tags response: {response_text}")
         return []
     except Exception as e:
         logger.error(f"Failed to generate tags: {e}")
         return []
 
 
+async def generate_embedding_summary(content: str, title: str = "") -> str:
+    """Generate a structured summary optimized for semantic search.
+
+    This creates a structured format that helps match user queries like
+    "What did I save about X?" in a personal knowledge hub.
+    """
+    client = await get_client()
+    model = get_model()
+
+    prompt = f"""Analyze this content and create a structured summary for semantic search.
+
+Title: {title}
+Content: {content[:3000]}
+
+Create a structured summary in this exact format:
+Topic: [main subject in 3-5 words]
+Concepts: [key concepts, technologies, or ideas - comma separated]
+Keywords: [searchable terms - comma separated]
+
+Q: What is this about?
+A: [1 sentence description]
+
+Q: Why might this be saved?
+A: [likely reasons for saving - learning, reference, project, etc.]
+
+Output only the structured summary, nothing else."""
+
+    try:
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "You create structured summaries for semantic search. Follow the exact format requested."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=300,
+        )
+        return response.choices[0].message.content.strip() if response.choices[0].message.content else ""
+    except Exception as e:
+        logger.error(f"Failed to generate embedding summary: {e}")
+        return ""
+
+
 async def process_memory_async(memory_id: int) -> None:
     """Background task to process a memory with AI.
 
-    Generates summary, tags, and title (for web memories), then updates the memory.
+    Generates summary, embedding_summary, tags, and title (for web memories),
+    then re-embeds the memory using the structured embedding_summary.
     This function is designed to be run as a background task.
     """
     try:
@@ -173,6 +220,7 @@ async def process_memory_async(memory_id: int) -> None:
         # Build list of tasks to run in parallel
         tasks = [
             generate_summary(content, title),
+            generate_embedding_summary(content, title),
             generate_tags(content, title, existing_tag_names),
         ]
 
@@ -184,8 +232,9 @@ async def process_memory_async(memory_id: int) -> None:
         results = await asyncio.gather(*tasks)
 
         summary = results[0]
-        tags = results[1]
-        new_title = results[2] if should_generate_title else None
+        embedding_summary = results[1]
+        tags = results[2]
+        new_title = results[3] if should_generate_title else None
 
         updated = False
 
@@ -200,6 +249,25 @@ async def process_memory_async(memory_id: int) -> None:
             await update_memory_summary(memory_id, summary)
             logger.info(f"Updated memory {memory_id} with summary")
             updated = True
+
+        # Update memory with embedding summary
+        if embedding_summary:
+            await update_memory_embedding_summary(memory_id, embedding_summary)
+            logger.info(f"Updated memory {memory_id} with embedding summary")
+            updated = True
+
+            # Re-embed using the structured embedding summary
+            try:
+                # Skip embedding if summary is empty/whitespace
+                if embedding_summary.strip():
+                    embedding = await get_embedding(embedding_summary)
+                    embedding_model = get_current_embedding_model()
+                    await update_memory_embedding(memory_id, embedding, embedding_model)
+                    logger.info(f"Re-embedded memory {memory_id} with embedding summary")
+                else:
+                    logger.warning(f"Embedding summary for memory {memory_id} is empty, skipping re-embed")
+            except Exception as e:
+                logger.error(f"Failed to re-embed memory {memory_id}: {e}")
 
         # Add AI-generated tags
         if tags:

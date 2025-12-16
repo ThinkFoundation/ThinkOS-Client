@@ -16,9 +16,9 @@ export function PromptChips({
 }: PromptChipsProps) {
   return (
     <div className={cn("flex flex-wrap gap-2", className)}>
-      {prompts.map((prompt) => (
+      {prompts.map((prompt, index) => (
         <button
-          key={prompt}
+          key={`${index}-${prompt.slice(0, 20)}`}
           onClick={() => onSelect(prompt)}
           className={cn(
             chips.base,

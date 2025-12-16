@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -144,30 +145,29 @@ async def read_memory(memory_id: int):
 
 @router.post("/memories")
 async def save_memory(memory: MemoryCreate):
-    # Check for duplicate URL
+    # Validate URL scheme if URL is provided
     if memory.url:
+        parsed = urlparse(memory.url)
+        if parsed.scheme not in ("http", "https"):
+            raise HTTPException(status_code=400, detail="Invalid URL scheme. Only http and https are allowed.")
+
+        # Check for duplicate URL
         existing = await get_memory_by_url(memory.url)
         if existing:
             return {"duplicate": True, "existing_memory": existing}
 
-    embedding = None
-    embedding_model = None
-    try:
-        embedding = await get_embedding(format_memory_for_embedding(memory.title, memory.content))
-        embedding_model = get_current_embedding_model()
-    except Exception as e:
-        logger.warning(f"Embedding generation failed: {e}")
-
     # For web memories, store original title for reference (AI will generate a cleaner title later)
     original_title = memory.title if memory.type == "web" else None
 
+    # Don't embed at save time - background task will generate embedding_summary
+    # and embed with that for better semantic quality
     result = await create_memory(
         title=memory.title,
         content=memory.content,
         memory_type=memory.type,
         url=memory.url,
-        embedding=embedding,
-        embedding_model=embedding_model,
+        embedding=None,
+        embedding_model=None,
         original_title=original_title,
     )
 
@@ -287,7 +287,11 @@ async def regenerate_embeddings(batch_size: int = Query(10, ge=1, le=50)):
 
     for memory in memories:
         try:
-            text = format_memory_for_embedding(memory['title'], memory['content'])
+            # Use embedding_summary if available, otherwise fall back to content
+            if memory.get('embedding_summary'):
+                text = memory['embedding_summary']
+            else:
+                text = format_memory_for_embedding(memory['title'], memory['content'])
             embedding = await get_embedding(text)
             await update_memory_embedding(memory["id"], embedding, embedding_model)
             processed += 1
