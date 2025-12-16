@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Button } from '@/components/ui/button';
 import { BookOpen, ChevronRight, ExternalLink, FileText, Bookmark, Save, Sparkles, MoreHorizontal, Check, Send, Loader2, Copy } from 'lucide-react';
-import type { ChatMessageData, SourceMemory, SaveConversationResult, SummarizeChatResult, MemoryData } from '../native-client';
+import type { ChatMessageData, ChatResponse, SourceMemory, SaveConversationResult, SummarizeChatResult, MemoryData } from '../native-client';
 
 // Helper to send messages via background script
 function sendToBackground<T>(type: string, data: unknown): Promise<T> {
@@ -20,7 +20,7 @@ function sendToBackground<T>(type: string, data: unknown): Promise<T> {
 }
 
 // Send chat message via background script (content scripts can't use connectNative)
-async function sendChatMessageViaBackground(data: ChatMessageData): Promise<{ response: string; sources?: SourceMemory[] }> {
+async function sendChatMessageViaBackground(data: ChatMessageData): Promise<ChatResponse> {
   return sendToBackground('CHAT_MESSAGE', data);
 }
 
@@ -82,6 +82,10 @@ export function ChatSidebar({ pageContent, pageUrl, pageTitle, onClose }: ChatSi
   const [showActions, setShowActions] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  // Page summary caching - store summary from first response for subsequent requests
+  const [pageSummary, setPageSummary] = useState<string | null>(null);
+  // Follow-up suggestions from LLM
+  const [followupSuggestions, setFollowupSuggestions] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -97,12 +101,13 @@ export function ChatSidebar({ pageContent, pageUrl, pageTitle, onClose }: ChatSi
     inputRef.current?.focus();
   }, []);
 
-  const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+  const sendMessage = async (messageText?: string) => {
+    const userMessage = (messageText || input).trim();
+    if (!userMessage || loading) return;
 
-    const userMessage = input.trim();
     setInput('');
     setError(null);
+    setFollowupSuggestions([]); // Clear previous follow-ups
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setLoading(true);
 
@@ -113,10 +118,22 @@ export function ChatSidebar({ pageContent, pageUrl, pageTitle, onClose }: ChatSi
         page_url: pageUrl,
         page_title: pageTitle,
         history: messages,
+        // Include cached page summary if available (frontend passback caching)
+        ...(pageSummary && { page_summary: pageSummary }),
       };
 
       const response = await sendChatMessageViaBackground(data);
       setMessages(prev => [...prev, { role: 'assistant', content: response.response }]);
+
+      // Cache page summary for subsequent requests (only returned on first message)
+      if (response.page_summary) {
+        setPageSummary(response.page_summary);
+      }
+
+      // Store follow-up suggestions
+      if (response.followups?.length) {
+        setFollowupSuggestions(response.followups);
+      }
 
       // Accumulate unique sources
       if (response.sources?.length) {
@@ -383,6 +400,24 @@ export function ChatSidebar({ pageContent, pageUrl, pageTitle, onClose }: ChatSi
         </div>
       )}
 
+      {/* Follow-up suggestions */}
+      {followupSuggestions.length > 0 && !loading && (
+        <div className="px-4 py-2 border-t border-border">
+          <div className="flex flex-wrap gap-2">
+            {followupSuggestions.map((suggestion, index) => (
+              <button
+                key={index}
+                onClick={() => sendMessage(suggestion)}
+                className="px-3 py-1.5 text-xs bg-white/70 dark:bg-white/5 backdrop-blur-md border border-white/60 dark:border-white/10 rounded-full hover:bg-accent hover:border-primary/30 transition-all duration-200 text-left max-w-full truncate"
+                title={suggestion}
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Input */}
       <div className="p-3 border-t border-border">
         <div className="relative flex items-center gap-2 p-2 rounded-full bg-white/70 dark:bg-white/5 backdrop-blur-xl border border-white/60 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/20">
@@ -399,7 +434,7 @@ export function ChatSidebar({ pageContent, pageUrl, pageTitle, onClose }: ChatSi
           <Button
             size="icon"
             className="h-10 w-10 rounded-full shrink-0"
-            onClick={sendMessage}
+            onClick={() => sendMessage()}
             disabled={loading || !input.trim()}
           >
             {loading ? (

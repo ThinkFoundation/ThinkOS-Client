@@ -1,6 +1,7 @@
 """Chat suggestion generation service."""
 import json
 import logging
+import re
 import threading
 from datetime import datetime, timedelta, timezone
 
@@ -182,9 +183,11 @@ Return ONLY a JSON array of 2-3 question strings, like: ["Question 1?", "Questio
 
         result = response.choices[0].message.content
         if not result:
+            logger.warning("LLM returned empty content for follow-ups")
             return []
 
         result = result.strip()
+        logger.debug(f"Raw follow-up response: {result[:200]}")
 
         # Handle markdown code blocks
         if result.startswith("```"):
@@ -193,24 +196,32 @@ Return ONLY a JSON array of 2-3 question strings, like: ["Question 1?", "Questio
             result = "\n".join(lines[1:-1] if len(lines) > 2 else lines)
             result = result.strip()
 
-        # Parse JSON
-        suggestions = json.loads(result)
+        # Try to parse as JSON
+        try:
+            suggestions = json.loads(result)
+            if isinstance(suggestions, list):
+                # Clean and validate suggestions
+                cleaned = []
+                for s in suggestions[:3]:
+                    if isinstance(s, str) and s.strip():
+                        cleaned.append(s.strip())
+                return cleaned
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON parse failed: {e}, trying fallback extraction")
 
-        if isinstance(suggestions, list):
-            # Clean and validate suggestions
-            cleaned = []
-            for s in suggestions[:3]:
-                if isinstance(s, str) and s.strip():
-                    cleaned.append(s.strip())
-            return cleaned
+        # Fallback: extract questions from text (lines ending with ?)
+        questions = re.findall(r'["\']?([^"\']+\?)["\']?', result)
+        if questions:
+            cleaned = [q.strip() for q in questions[:3] if len(q.strip()) > 10]
+            if cleaned:
+                logger.info(f"Extracted {len(cleaned)} questions via fallback")
+                return cleaned
 
+        logger.warning(f"Could not extract follow-ups from: {result[:100]}")
         return []
 
-    except json.JSONDecodeError as e:
-        logger.warning(f"Failed to parse follow-up suggestions JSON: {e}")
-        return []
     except Exception as e:
-        logger.error(f"Failed to generate follow-up suggestions: {e}")
+        logger.error(f"Failed to generate follow-up suggestions: {e}", exc_info=True)
         return []
 
 
