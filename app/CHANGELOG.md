@@ -1,5 +1,34 @@
 # think-app
 
+## 0.4.0
+
+### Minor Changes
+
+- d0fe719: Chat UX improvements and code quality fixes
+
+  **Chat Experience:**
+
+  - Query rewriting for follow-up messages - better context handling in conversations
+  - Special handlers for generic prompts ("summarize recent") using date-based retrieval
+  - Dynamic quick prompts based on recent memories and popular tags
+  - LLM-generated follow-up suggestions after responses
+
+  **Backend Improvements:**
+
+  - Background job system for re-embedding memories
+  - N+1 query optimizations for conversations and memories listing
+  - Thread-safe caching for suggestions
+  - URL scheme validation for memory creation
+  - Timing-attack resistant token comparison
+
+  **Frontend Polish:**
+
+  - Improved SSE streaming with proper buffering
+  - Resource cleanup for stream readers
+  - Optimized scroll behavior during streaming
+
+- aef4cb5: Improve lock screen setup UX with time-based greeting and clearer instructions
+
 ## 0.3.2
 
 ### Patch Changes
