@@ -1,6 +1,6 @@
 ---
 "think-app": minor
-"think-backend": minor
+"think-extension": minor
 ---
 
 Chat UX improvements and code quality fixes
