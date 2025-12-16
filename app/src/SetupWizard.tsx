@@ -237,8 +237,9 @@ export default function SetupWizard({ onComplete }: Props) {
             </svg>
           </div>
           <p className="text-muted-foreground">
-            Ollama is running and models are ready. <br/>
-            You can now use Think with local AI.
+            Ollama is running and models are ready.
+            <br/>
+            You can now use Think with local&nbsp;AI.
           </p>
           <Button className="w-full" onClick={onComplete}>
             Get Started

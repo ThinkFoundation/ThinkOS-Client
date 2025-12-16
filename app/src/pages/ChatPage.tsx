@@ -272,7 +272,7 @@ export default function ChatPage() {
 
         {/* Floating input at bottom */}
         <div className="flex-none p-4">
-          <div className="max-w-2xl mx-auto">
+          <div className="max-w-[640px] mx-auto">
             <div className="flex items-center gap-2">
               <div className="flex-1">
                 <ChatInput

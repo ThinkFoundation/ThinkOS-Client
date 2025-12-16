@@ -138,7 +138,7 @@ export default function HomePage({ userName }: HomePageProps) {
                 </ul>
               )}
               <Link to="/memories">
-                <Button variant="ghost" size="sm" className="mt-2 w-full">
+                <Button variant="outline" size="sm" className="mt-2 w-full">
                   View all
                 </Button>
               </Link>

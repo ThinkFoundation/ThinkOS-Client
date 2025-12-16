@@ -26,7 +26,12 @@ export default function Sidebar() {
           <img
             src="./icons/think-os-agent-grey.svg"
             alt="Think"
-            className="w-full h-full object-contain"
+            className="w-full h-full object-contain dark:hidden"
+          />
+          <img
+            src="./icons/think-os-agent-dark-mode-filled.svg"
+            alt="Think"
+            className="w-full h-full object-contain hidden dark:block"
           />
         </div>
       </div>
@@ -37,7 +42,7 @@ export default function Sidebar() {
             to={item.to}
             onClick={() => handleNavClick(item.to)}
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center py-2 text-xs transition-colors border-l-2 ${
+              `flex flex-col items-center justify-center py-2 text-[10px] transition-colors border-l-2 ${
                 isActive
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"

@@ -54,11 +54,16 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
       className={cn(
         "group flex items-center gap-2 px-2 py-2 rounded-md text-sm cursor-pointer transition-colors",
         currentConversationId === conversation.id
-          ? "bg-primary/10 text-foreground"
+          ? "bg-primary/5 dark:bg-[#242633] text-foreground"
           : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
       )}
     >
-      <MessageSquare className="h-4 w-4 shrink-0" />
+      <MessageSquare
+        className={cn(
+          "h-4 w-4 shrink-0",
+          currentConversationId === conversation.id && "text-primary dark:text-foreground"
+        )}
+      />
       <span className="flex-1 truncate text-xs">
         {conversation.title || "New conversation"}
       </span>

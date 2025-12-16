@@ -43,7 +43,7 @@
       "resources": [
         "assets/*",
         "branding/*",
-        "fonts/WorkSans-VariableFont_wght.ttf",
+        "fonts/Inter-VariableFont_slnt,wght.ttf",
         "fonts/GoudyBookletter1911-Regular.ttf",
         "popup.css"
       ],
