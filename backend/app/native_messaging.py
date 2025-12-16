@@ -11,10 +11,14 @@ from .db import get_memory_by_url, create_memory, update_memory, get_memory, is_
 from .db.crud import create_conversation, add_message
 from .db.search import search_similar_memories
 from .schemas import MemoryCreate, format_memory_for_embedding
-from .services.embeddings import get_embedding
+from .services.embeddings import get_embedding, get_current_embedding_model
 from .services.ai_processing import process_memory_async, process_conversation_title_async
 from .services.ai import chat
 from .services.query_processing import preprocess_query, extract_keywords
+from .services.query_rewriting import maybe_rewrite_query
+from .services.special_handlers import is_special_prompt, execute_special_handler
+from .services.suggestions import generate_followup_suggestions
+from .services.memory_filtering import filter_memories_dynamically, format_memories_as_context
 from .events import event_manager, MemoryEvent, EventType
 
 logger = logging.getLogger(__name__)
@@ -236,13 +240,39 @@ class NativeMessagingServer:
 
         return result
 
+    async def _generate_page_summary(self, page_content: str, page_title: str) -> str:
+        """Generate a concise summary of the page for memory search."""
+        if not page_content:
+            return ""
+
+        truncated = page_content[:4000]
+        prompt = f"""Summarize the key topics and concepts from this page titled '{page_title}' in 2-3 sentences. Focus on the main subject matter that would be useful for finding related saved memories.
+
+Page content:
+{truncated}
+
+Summary:"""
+
+        try:
+            summary = await chat(prompt, context="", history=[])
+            return summary.strip()
+        except Exception as e:
+            logger.warning(f"Page summary generation failed: {e}")
+            return ""
+
     async def _chat_message(self, params: dict) -> dict:
-        """Handle chat.message request - chat with current page + memories context."""
+        """Handle chat.message request - chat with current page + memories context.
+
+        Enhanced with full RAG pipeline: query rewriting, special handlers,
+        page summary for hybrid search, model-specific thresholds, and follow-up suggestions.
+        """
         message = params.get("message", "")
         page_content = params.get("page_content", "")
         page_url = params.get("page_url", "")
         page_title = params.get("page_title", "")
         history = params.get("history", [])
+        # Frontend passback caching - use cached summary if provided
+        page_summary = params.get("page_summary", "")
 
         if not message:
             raise ValueError("Missing required parameter: message")
@@ -250,51 +280,78 @@ class NativeMessagingServer:
         # Build context from current page and relevant memories
         context_parts = []
         sources = []
+        return_page_summary = None
 
-        # Add current page context
+        # Generate page summary for memory search (only on first message)
+        if page_content and not page_summary:
+            page_summary = await self._generate_page_summary(page_content, page_title)
+            return_page_summary = page_summary  # Return to frontend for caching
+
+        # Add current page context (increased from 4000 to 8000 chars)
         if page_content:
-            # Truncate page content to reasonable size
-            truncated_content = page_content[:4000]
+            truncated_content = page_content[:8000]
             context_parts.append(f"Current page ({page_title or page_url}):\n{truncated_content}")
 
-        # Search for relevant memories based on the user's message
+        # Check for special prompts (date-based retrieval handlers)
         try:
-            processed_query = preprocess_query(message)
-            query_embedding = await get_embedding(processed_query)
-            keyword_query = extract_keywords(message)
+            special_handler = await is_special_prompt(message)
+            if special_handler:
+                logger.info(f"Using special handler: {special_handler}")
+                memories_context, sources = await execute_special_handler(special_handler, message)
+                if memories_context:
+                    context_parts.append(memories_context)
+            else:
+                # Normal RAG flow with embedding search
 
-            memories = await search_similar_memories(
-                query_embedding=query_embedding,
-                limit=10,
-                keyword_query=keyword_query,
-            )
+                # Query rewriting for follow-up messages
+                search_query, was_rewritten = await maybe_rewrite_query(message, history)
+                if was_rewritten:
+                    logger.info(f"Using rewritten query for RAG: '{search_query}'")
 
-            if memories:
-                # Filter using dynamic threshold based on best match quality
-                with_distance = [m for m in memories if m.get("distance") is not None]
-                relevant_memories = []
+                # Preprocess the user's query for embedding search
+                # NOTE: Don't concatenate page summary with query - it dilutes semantic meaning
+                processed_query = preprocess_query(search_query)
+                query_embedding = await get_embedding(processed_query)
 
-                if with_distance:
-                    with_distance.sort(key=lambda m: m["distance"])
-                    best_distance = with_distance[0]["distance"]
+                # Use page summary only for keyword extraction (FTS search)
+                keyword_query = extract_keywords(search_query)
+                if page_summary:
+                    # Add top keywords from page context for hybrid search
+                    page_keywords = extract_keywords(page_summary)
+                    if page_keywords:
+                        # Only use first few keywords to avoid overwhelming
+                        keyword_query = f"{keyword_query} {page_keywords[:100]}"
 
-                    # Only include if best match is good enough (< 0.25)
-                    if best_distance < 0.25:
-                        threshold = best_distance + 0.1
-                        relevant_memories = [m for m in with_distance if m["distance"] <= threshold][:5]
+                memories = await search_similar_memories(
+                    query_embedding=query_embedding,
+                    limit=10,
+                    keyword_query=keyword_query,
+                )
 
-                # Build sources list for the response
-                sources = [
-                    {"id": m["id"], "title": m["title"], "url": m.get("url")}
-                    for m in relevant_memories
-                ]
+                if memories:
+                    # Use model-specific thresholds for filtering
+                    embedding_model = get_current_embedding_model()
+                    filtered_memories = filter_memories_dynamically(
+                        memories, embedding_model=embedding_model
+                    )
 
-                if relevant_memories:
-                    memories_context = "\n\n".join([
-                        f"From saved memory '{m['title']}':\n{(m.get('summary') or m['content'][:500])}"
-                        for m in relevant_memories
-                    ])
-                    context_parts.append(f"Relevant saved memories:\n{memories_context}")
+                    # Build sources list for the response
+                    sources = [
+                        {
+                            "id": m["id"],
+                            "title": m["title"],
+                            "url": m.get("url"),
+                            "distance": m.get("distance"),
+                            "match_type": m.get("match_type", "vector"),
+                        }
+                        for m in filtered_memories
+                    ]
+
+                    # Format memories as context
+                    memories_context = format_memories_as_context(filtered_memories)
+                    if memories_context:
+                        context_parts.append(memories_context)
+
         except Exception as e:
             logger.warning(f"Memory search failed: {e}")
 
@@ -304,7 +361,29 @@ class NativeMessagingServer:
         # Get AI response
         response = await chat(message, context=context, history=history)
 
-        return {"response": response, "sources": sources}
+        # Generate follow-up suggestions
+        followups = []
+        try:
+            logger.info(f"Generating follow-ups for: {message[:50]}...")
+            followups = await generate_followup_suggestions(message, response, sources)
+            if followups:
+                logger.info(f"Generated {len(followups)} follow-ups: {followups}")
+            else:
+                logger.info("No follow-ups generated (empty list returned)")
+        except Exception as e:
+            logger.error(f"Follow-up generation failed: {e}", exc_info=True)
+
+        result = {"response": response, "sources": sources}
+
+        # Include follow-ups if generated
+        if followups:
+            result["followups"] = followups
+
+        # Include page summary for frontend caching (only on first message)
+        if return_page_summary:
+            result["page_summary"] = return_page_summary
+
+        return result
 
     async def _save_conversation(self, params: dict) -> dict:
         """Save a sidebar conversation to the app's conversation history."""

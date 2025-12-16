@@ -1,5 +1,6 @@
 import logging
 import os
+import secrets
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +14,24 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+
+# Endpoints to exclude from access logs (polling/SSE endpoints)
+FILTERED_ENDPOINTS = [
+    "/api/memories/events",
+    "/api/settings/provider-status",
+]
+
+
+class EndpointFilter(logging.Filter):
+    """Filter out noisy polling/SSE endpoints from access logs."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        return not any(endpoint in message for endpoint in FILTERED_ENDPOINTS)
+
+
+# Apply filter to uvicorn access logger
+logging.getLogger("uvicorn.access").addFilter(EndpointFilter())
 
 
 @asynccontextmanager
@@ -76,8 +95,8 @@ async def require_app_token_middleware(request: Request, call_next):
         # Dev mode: no token configured, allow all requests
         return await call_next(request)
 
-    request_token = request.headers.get("X-App-Token")
-    if request_token != app_token:
+    request_token = request.headers.get("X-App-Token", "")
+    if not secrets.compare_digest(request_token, app_token):
         return JSONResponse(
             status_code=401,
             content={"detail": "Unauthorized: Invalid or missing app token"}

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from openai import APIConnectionError
@@ -8,8 +9,12 @@ from openai import APIConnectionError
 from ..services.ai import chat as ai_chat, chat_stream as ai_chat_stream, get_model
 from ..models_info import get_context_window
 from ..services.ai_processing import process_conversation_title_async
-from ..services.embeddings import get_embedding
+from ..services.embeddings import get_embedding, get_current_embedding_model
 from ..services.query_processing import preprocess_query, extract_keywords
+from ..services.query_rewriting import maybe_rewrite_query
+from ..services.suggestions import get_quick_prompts, generate_followup_suggestions
+from ..services.special_handlers import is_special_prompt, execute_special_handler
+from ..services.memory_filtering import filter_memories_dynamically, format_memories_as_context
 from ..db.search import search_similar_memories
 from ..schemas import ChatRequest
 from .. import config
@@ -21,105 +26,89 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["chat"])
 
 
-def filter_memories_dynamically(memories: list[dict], max_results: int = 5) -> list[dict]:
-    """Filter memories using distance-based relevance.
+@router.get("/chat/suggestions")
+async def chat_suggestions():
+    """Get dynamic quick prompts for starting a conversation.
 
-    Strategy:
-    - Sort by distance (best first)
-    - Include results within a range of the best match
-    - All match types (hybrid/keyword/vector) must pass distance check
-    - Adaptive limits based on best match quality
+    Returns a mix of special prompts (handled with date-based retrieval)
+    and dynamic prompts based on user's recent memories and tags.
     """
-    if not memories:
-        logger.info("No memories to filter")
-        return []
+    try:
+        prompts = await get_quick_prompts()
+        return {
+            "quick_prompts": prompts,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"Failed to generate suggestions: {e}")
+        # Fallback to static prompts
+        return {
+            "quick_prompts": [
+                {"id": "fallback-1", "text": "Summarize what I learned recently", "type": "special"},
+                {"id": "fallback-2", "text": "What connections exist between my memories?", "type": "special"},
+            ],
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
 
-    # Sort by distance (lowest/best first)
-    sorted_memories = sorted(memories, key=lambda m: m.get("distance") or 999)
 
-    # Log what we're working with
-    logger.info(f"Filtering {len(sorted_memories)} memories")
-    for m in sorted_memories[:5]:
-        dist = m.get('distance')
-        dist_str = f"{dist:.3f}" if dist is not None else "N/A"
-        rrf = m.get('rrf_score') or 0
-        rrf_str = f"{rrf:.4f}" if rrf else "N/A"
-        logger.info(f"  [{m.get('match_type', '?')}] {m.get('title', '')[:50]}... dist={dist_str} rrf={rrf_str}")
+async def _retrieve_context(message: str, history: list[dict]) -> tuple[str, list[dict]]:
+    """Retrieve relevant context and sources using RAG.
 
-    # Get the best distance
-    best_distance = sorted_memories[0].get("distance") if sorted_memories else None
-    if best_distance is None or best_distance >= 0.45:
-        logger.info(f"Best match too distant ({best_distance}), returning empty")
-        return []
+    Returns:
+        tuple[str, list[dict]]: (context string, list of source dicts)
+    """
+    context = ""
+    sources = []
 
-    # Calculate dynamic threshold: include results within range of best
-    # Tighter range for better matches, looser for weaker ones
-    if best_distance < 0.25:
-        # Excellent match: include results within +0.08
-        threshold = best_distance + 0.08
-        max_results = 5
-    elif best_distance < 0.35:
-        # Good match: include results within +0.06
-        threshold = best_distance + 0.06
-        max_results = 3
-    else:
-        # Marginal match: only include very close results
-        threshold = best_distance + 0.04
-        max_results = 2
+    # Skip RAG for very short messages (< 10 chars)
+    if len(message.strip()) < 10:
+        return context, sources
 
-    logger.info(f"Best distance: {best_distance:.3f}, threshold: {threshold:.3f}, max: {max_results}")
+    try:
+        # Check for special prompts that need date-based retrieval
+        special_handler = await is_special_prompt(message)
 
-    filtered = []
-    for m in sorted_memories:
-        distance = m.get("distance")
-        match_type = m.get("match_type", "vector")
-
-        if distance is None:
-            continue
-
-        if distance <= threshold:
-            logger.info(f"  Including [{match_type}] (dist={distance:.3f}): {m.get('title', '')[:30]}")
-            filtered.append(m)
+        if special_handler:
+            # Use special handler (date-based retrieval) for generic prompts
+            logger.info(f"Using special handler: {special_handler}")
+            context, sources = await execute_special_handler(special_handler, message)
         else:
-            logger.info(f"  Excluding [{match_type}] (dist={distance:.3f} > {threshold:.3f}): {m.get('title', '')[:30]}")
+            # Normal RAG flow with embedding search
+            # Query rewriting for follow-up messages
+            search_query, was_rewritten = await maybe_rewrite_query(message, history)
+            if was_rewritten:
+                logger.info(f"Using rewritten query for RAG: '{search_query}'")
 
-    result = filtered[:max_results]
-    logger.info(f"Filtered to {len(result)} memories")
-    return result
+            # Preprocess query to improve semantic matching
+            processed_query = preprocess_query(search_query)
+            keyword_query = extract_keywords(search_query)
+            query_embedding = await get_embedding(processed_query)
+            embedding_model = get_current_embedding_model()
+            similar_memories = await search_similar_memories(
+                query_embedding, limit=10, keyword_query=keyword_query
+            )
 
+            if similar_memories:
+                # Filter using dynamic threshold with model-specific thresholds
+                filtered_memories = filter_memories_dynamically(similar_memories, embedding_model=embedding_model)
+                context = format_memories_as_context(filtered_memories)
+                # Build sources list from filtered memories
+                sources = [
+                    {
+                        "id": m["id"],
+                        "title": m["title"],
+                        "url": m.get("url"),
+                        "distance": m.get("distance"),
+                        "match_type": m.get("match_type", "vector"),
+                        "rrf_score": m.get("rrf_score"),
+                    }
+                    for m in filtered_memories
+                ]
+    except Exception as e:
+        # RAG is an enhancement, not required - log and continue
+        logger.error(f"RAG retrieval error: {e}")
 
-def format_memories_as_context(memories: list[dict], max_chars: int = 4000) -> str:
-    """Format retrieved memories into a context string for the LLM.
-
-    Expects memories to be pre-filtered by filter_memories_dynamically.
-    """
-    if not memories:
-        return ""
-
-    context_parts = []
-    total_chars = 0
-
-    for memory in memories:
-        title = memory.get("title", "Untitled")
-        content = memory.get("content", "")
-
-        # Truncate content if too long
-        if len(content) > 800:
-            content = content[:800] + "..."
-
-        entry = f"### {title}\n{content}"
-
-        # Check if adding this would exceed limit
-        if total_chars + len(entry) > max_chars:
-            break
-
-        context_parts.append(entry)
-        total_chars += len(entry)
-
-    if not context_parts:
-        return ""
-
-    return "## Relevant Memories:\n\n" + "\n\n---\n\n".join(context_parts)
+    return context, sources
 
 
 @router.post("/chat")
@@ -146,7 +135,7 @@ async def chat(request: ChatRequest):
             raise HTTPException(status_code=404, detail="Conversation not found")
 
     # Save user message
-    user_message = await add_message(conversation_id, "user", request.message)
+    await add_message(conversation_id, "user", request.message)
 
     # Set conversation title from first message if new
     if is_new_conversation:
@@ -157,42 +146,7 @@ async def chat(request: ChatRequest):
         # Generate AI title in background
         asyncio.create_task(process_conversation_title_async(conversation_id, request.message))
 
-    # --- RAG: Retrieve relevant memories ---
-    context = ""
-    sources = []
-
-    # Skip RAG for very short messages (< 10 chars)
-    if len(request.message.strip()) >= 10:
-        try:
-            # Preprocess query to improve semantic matching
-            processed_query = preprocess_query(request.message)
-            keyword_query = extract_keywords(request.message)
-            query_embedding = await get_embedding(processed_query)
-            similar_memories = await search_similar_memories(
-                query_embedding, limit=10, keyword_query=keyword_query
-            )
-
-            if similar_memories:
-                # Filter using dynamic threshold
-                filtered_memories = filter_memories_dynamically(similar_memories)
-                context = format_memories_as_context(filtered_memories)
-                # Build sources list from filtered memories
-                sources = [
-                    {
-                        "id": m["id"],
-                        "title": m["title"],
-                        "url": m.get("url"),
-                        "distance": m.get("distance"),
-                        "match_type": m.get("match_type", "vector"),
-                        "rrf_score": m.get("rrf_score"),
-                    }
-                    for m in filtered_memories
-                ]
-        except Exception as e:
-            # RAG is an enhancement, not required - log and continue
-            logger.error(f"RAG retrieval error: {e}")
-
-    # --- Get conversation history ---
+    # --- Get conversation history (moved earlier for query rewriting) ---
     history = []
     conv_data = await get_conversation(conversation_id)
     if conv_data and conv_data.get("messages"):
@@ -202,11 +156,14 @@ async def chat(request: ChatRequest):
             for m in conv_data["messages"][:-1]
         ]
 
+    # --- RAG: Retrieve relevant memories ---
+    context, sources = await _retrieve_context(request.message, history)
+
     try:
         response = await ai_chat(request.message, context=context, history=history)
 
         # Save assistant message with sources
-        assistant_message = await add_message(conversation_id, "assistant", response, sources=sources)
+        await add_message(conversation_id, "assistant", response, sources=sources)
 
         return {
             "response": response,
@@ -280,41 +237,7 @@ async def chat_stream(request: ChatRequest):
         # Generate AI title in background
         asyncio.create_task(process_conversation_title_async(conversation_id, request.message))
 
-    # RAG: Retrieve relevant memories
-    context = ""
-    sources = []
-
-    # Skip RAG for very short messages (< 10 chars)
-    if len(request.message.strip()) >= 10:
-        try:
-            # Preprocess query to improve semantic matching
-            processed_query = preprocess_query(request.message)
-            keyword_query = extract_keywords(request.message)
-            query_embedding = await get_embedding(processed_query)
-            similar_memories = await search_similar_memories(
-                query_embedding, limit=10, keyword_query=keyword_query
-            )
-
-            if similar_memories:
-                # Filter using dynamic threshold
-                filtered_memories = filter_memories_dynamically(similar_memories)
-                context = format_memories_as_context(filtered_memories)
-                # Build sources list from filtered memories
-                sources = [
-                    {
-                        "id": m["id"],
-                        "title": m["title"],
-                        "url": m.get("url"),
-                        "distance": m.get("distance"),
-                        "match_type": m.get("match_type", "vector"),
-                        "rrf_score": m.get("rrf_score"),
-                    }
-                    for m in filtered_memories
-                ]
-        except Exception as e:
-            logger.error(f"RAG retrieval error: {e}")
-
-    # Get conversation history
+    # Get conversation history (moved earlier for query rewriting)
     history = []
     conv_data = await get_conversation(conversation_id)
     if conv_data and conv_data.get("messages"):
@@ -322,6 +245,9 @@ async def chat_stream(request: ChatRequest):
             {"role": m["role"], "content": m["content"]}
             for m in conv_data["messages"][:-1]
         ]
+
+    # RAG: Retrieve relevant memories
+    context, sources = await _retrieve_context(request.message, history)
 
     async def generate():
         full_response = ""
@@ -347,6 +273,19 @@ async def chat_stream(request: ChatRequest):
                 done_data['usage'] = usage_data
                 done_data['context_window'] = get_context_window(get_model())
             yield f"data: {json.dumps(done_data)}\n\n"
+
+            # Generate and send follow-up suggestions (non-blocking)
+            try:
+                followups = await generate_followup_suggestions(
+                    request.message,
+                    full_response,
+                    sources,
+                )
+                if followups:
+                    yield f"data: {json.dumps({'type': 'followups', 'suggestions': followups})}\n\n"
+            except Exception as e:
+                logger.warning(f"Follow-up generation failed: {e}")
+                # Silent failure - don't break the chat
 
         except APIConnectionError:
             error_msg = "Cannot connect to AI provider. Please check your settings."

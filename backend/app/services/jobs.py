@@ -158,29 +158,32 @@ job_manager = JobManager()
 
 async def reembed_worker(job_id: str) -> None:
     """
-    Background worker for re-embedding all stale memories.
+    Unified background worker for processing all memories.
 
-    This worker:
-    - Re-reads the current embedding model per batch (handles mid-job model changes)
-    - Updates progress after each batch
-    - Checks for cancellation between batches
-    - Handles errors per-memory (doesn't fail entire job)
+    This worker handles two phases:
+    1. Generate embedding_summary for memories that don't have one, then embed
+    2. Re-embed memories that have embedding_summary but stale/no embedding
+
+    Progress is tracked across both phases for smooth UI updates.
     """
     from .embeddings import get_embedding, get_current_embedding_model
+    from .ai_processing import generate_embedding_summary
     from ..db.crud import (
-        count_memories_needing_reembedding,
+        count_memories_needing_processing,
+        get_memories_without_embedding_summary,
         get_memories_needing_reembedding,
         update_memory_embedding,
+        update_memory_embedding_summary,
+        increment_processing_attempts,
     )
-    from ..schemas import format_memory_for_embedding
 
     try:
-        # Mark job as started
         await job_manager.mark_started(job_id)
 
-        # Get initial model and count
+        # Get current model and count total work
         current_model = get_current_embedding_model()
-        total = await count_memories_needing_reembedding(current_model)
+        counts = await count_memories_needing_processing(current_model)
+        total = counts["total"]
 
         if total == 0:
             await job_manager.mark_completed(job_id, {"processed": 0, "failed": 0})
@@ -190,56 +193,128 @@ async def reembed_worker(job_id: str) -> None:
 
         processed = 0
         failed = 0
-        batch_size = 10
+
+        # ========== Phase 1: Generate summaries + embed ==========
+        # Process memories that don't have embedding_summary yet
+        summary_batch_size = 5  # Smaller batches for LLM calls
 
         while True:
-            # Check for cancellation
             job = await job_manager.get_job(job_id)
             if not job or job["status"] == JobStatus.CANCELLED.value:
                 logger.info(f"Job {job_id} was cancelled")
                 break
 
-            # Re-read current model (handles settings changes during job)
-            current_model = get_current_embedding_model()
-
-            # Fetch next batch
-            memories = await get_memories_needing_reembedding(current_model, limit=batch_size)
-
+            memories = await get_memories_without_embedding_summary(limit=summary_batch_size)
             if not memories:
                 break
 
+            batch_processed = 0
+            batch_failed = 0
+
             for memory in memories:
                 try:
-                    text = format_memory_for_embedding(memory["title"], memory["content"])
-                    if not text or not text.strip():
-                        logger.warning(f"Skipping memory {memory['id']}: empty content")
-                        failed += 1
-                        continue
-                    embedding = await get_embedding(text)
-                    await update_memory_embedding(memory["id"], embedding, current_model)
-                    processed += 1
-                    logger.debug(f"Re-embedded memory {memory['id']}")
-                except Exception as e:
-                    logger.warning(f"Re-embedding failed for memory {memory['id']}: {e}")
-                    failed += 1
+                    content = memory.get("content", "")
+                    title = memory.get("title", "")
 
-                # Small delay to prevent Ollama overload
-                await asyncio.sleep(0.1)
+                    if not content:
+                        logger.warning(f"Skipping memory {memory['id']}: no content")
+                        await increment_processing_attempts(memory["id"])
+                        batch_failed += 1
+                        continue
+
+                    # Generate embedding summary
+                    embedding_summary = await generate_embedding_summary(content, title)
+                    if not embedding_summary:
+                        logger.warning(f"Empty embedding_summary for memory {memory['id']}")
+                        await increment_processing_attempts(memory["id"])
+                        batch_failed += 1
+                        continue
+
+                    await update_memory_embedding_summary(memory["id"], embedding_summary)
+
+                    # Immediately embed using the new summary
+                    current_model = get_current_embedding_model()
+                    embedding = await get_embedding(embedding_summary)
+                    await update_memory_embedding(memory["id"], embedding, current_model)
+
+                    batch_processed += 1
+                    logger.debug(f"Generated summary and embedded memory {memory['id']}")
+
+                except Exception as e:
+                    logger.warning(f"Failed to process memory {memory['id']}: {e}")
+                    await increment_processing_attempts(memory["id"])
+                    batch_failed += 1
+
+                # Delay between LLM calls
+                await asyncio.sleep(0.3)
+
+            processed += batch_processed
+            failed += batch_failed
 
             # Update progress
-            total_done = processed + failed
-            progress = int((total_done / total) * 100) if total > 0 else 100
+            progress = int((processed + failed) / total * 100) if total > 0 else 100
             await job_manager.update_job(
                 job_id,
                 processed=processed,
                 failed=failed,
-                progress=min(progress, 99)  # Reserve 100 for completion
+                progress=min(progress, 99)
             )
 
-        # Mark completed
+            if batch_processed == 0 and batch_failed == len(memories):
+                logger.warning(f"Job {job_id} phase 1: all {batch_failed} in batch failed, moving to phase 2")
+                break
+
+        # ========== Phase 2: Re-embed existing summaries ==========
+        # Process memories that have embedding_summary but need (re)embedding
+        embed_batch_size = 10
+
+        while True:
+            job = await job_manager.get_job(job_id)
+            if not job or job["status"] == JobStatus.CANCELLED.value:
+                logger.info(f"Job {job_id} was cancelled")
+                break
+
+            current_model = get_current_embedding_model()
+            memories = await get_memories_needing_reembedding(current_model, limit=embed_batch_size)
+            if not memories:
+                break
+
+            batch_processed = 0
+            batch_failed = 0
+
+            for memory in memories:
+                try:
+                    text = memory["embedding_summary"]
+                    embedding = await get_embedding(text)
+                    await update_memory_embedding(memory["id"], embedding, current_model)
+                    batch_processed += 1
+                    logger.debug(f"Re-embedded memory {memory['id']}")
+                except Exception as e:
+                    logger.warning(f"Re-embedding failed for memory {memory['id']}: {e}")
+                    batch_failed += 1
+
+                await asyncio.sleep(0.1)
+
+            processed += batch_processed
+            failed += batch_failed
+
+            progress = int((processed + failed) / total * 100) if total > 0 else 100
+            await job_manager.update_job(
+                job_id,
+                processed=processed,
+                failed=failed,
+                progress=min(progress, 99)
+            )
+
+            if batch_processed == 0 and batch_failed == len(memories):
+                logger.warning(f"Job {job_id} phase 2: all {batch_failed} in batch failed, stopping")
+                break
+
         await job_manager.mark_completed(job_id, {"processed": processed, "failed": failed})
-        logger.info(f"Re-embed job {job_id} completed: {processed} processed, {failed} failed")
+        logger.info(f"Reembed job {job_id} completed: {processed} processed, {failed} failed")
 
     except Exception as e:
-        logger.exception(f"Re-embed job {job_id} failed with error: {e}")
+        logger.exception(f"Reembed job {job_id} failed with error: {e}")
         await job_manager.mark_failed(job_id, str(e))
+
+

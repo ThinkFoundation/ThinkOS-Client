@@ -214,6 +214,8 @@ export interface ChatMessageData {
   page_url?: string;
   page_title?: string;
   history?: Array<{ role: "user" | "assistant"; content: string }>;
+  /** Cached page summary from previous response (frontend passback caching) */
+  page_summary?: string;
 }
 
 /**
@@ -223,6 +225,10 @@ export interface SourceMemory {
   id: number;
   title: string;
   url?: string;
+  /** Cosine distance from query (lower = more similar) */
+  distance?: number;
+  /** How the match was found: 'vector', 'keyword', or 'hybrid' */
+  match_type?: string;
 }
 
 /**
@@ -231,6 +237,10 @@ export interface SourceMemory {
 export interface ChatResponse {
   response: string;
   sources?: SourceMemory[];
+  /** LLM-generated follow-up question suggestions */
+  followups?: string[];
+  /** Page summary for frontend caching (only returned on first message) */
+  page_summary?: string;
 }
 
 /**

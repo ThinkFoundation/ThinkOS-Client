@@ -38,9 +38,13 @@ class CreateJobResponse(BaseModel):
 @router.post("/reembed", response_model=CreateJobResponse)
 async def create_reembed_job():
     """
-    Start a background re-embedding job.
+    Start a background job to process all memories.
 
-    If a re-embedding job is already running, returns the existing job
+    This unified job handles:
+    1. Generating embedding_summary for memories that don't have one
+    2. Creating/updating embeddings using the embedding_summary
+
+    If a job is already running, returns the existing job
     instead of creating a duplicate.
     """
     # Check if there's already an active reembed job

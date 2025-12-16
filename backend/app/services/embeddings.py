@@ -19,69 +19,34 @@ def get_current_embedding_model() -> str:
 
 
 # Context windows for embedding models (in tokens)
-# NOTE: Ollama v0.13+ has drastically smaller limits than documented
+# NOTE: Ollama models have smaller practical limits than documented
 EMBEDDING_MODEL_CONTEXT = {
-    "mxbai-embed-large": 256,        # Documented 8192, actual ~256
-    "snowflake-arctic-embed": 256,   # Very conservative
+    "mxbai-embed-large": 512,
+    "snowflake-arctic-embed": 512,
     # OpenAI (these actually work as documented)
     "text-embedding-3-small": 8191,
     "text-embedding-3-large": 8191,
     "text-embedding-ada-002": 8191,
 }
-DEFAULT_EMBEDDING_CONTEXT = 256  # Very conservative for unknown models
+DEFAULT_EMBEDDING_CONTEXT = 512
 CHARS_PER_TOKEN = 4
 
 
-def chunk_text(text: str, max_tokens: int) -> list[str]:
-    """Split text into chunks that fit within token limit."""
+def truncate_text(text: str, max_tokens: int) -> str:
+    """Truncate text to fit within token limit. Simple and preserves semantic meaning."""
     max_chars = (max_tokens - 50) * CHARS_PER_TOKEN  # Safety margin
     if len(text) <= max_chars:
-        return [text]
-
-    chunks = []
-    paragraphs = text.split("\n\n")
-    current_chunk = ""
-
-    for para in paragraphs:
-        if len(current_chunk) + len(para) + 2 <= max_chars:
-            current_chunk += ("\n\n" if current_chunk else "") + para
-        else:
-            if current_chunk:
-                chunks.append(current_chunk)
-                current_chunk = ""
-            if len(para) > max_chars:
-                # Split long paragraphs by sentences
-                sentences = para.replace(". ", ".\n").split("\n")
-                for sent in sentences:
-                    if len(current_chunk) + len(sent) + 1 <= max_chars:
-                        current_chunk += (" " if current_chunk else "") + sent
-                    else:
-                        if current_chunk:
-                            chunks.append(current_chunk)
-                            current_chunk = ""
-                        # Handle very long sentences by hard-splitting
-                        while len(sent) > max_chars:
-                            chunks.append(sent[:max_chars])
-                            sent = sent[max_chars:]
-                        if sent:
-                            current_chunk = sent
-            else:
-                current_chunk = para
-
-    if current_chunk:
-        chunks.append(current_chunk)
-
-    return chunks
-
-
-def average_embeddings(embeddings: list[list[float]]) -> list[float]:
-    """Average multiple embedding vectors."""
-    arr = np.array(embeddings)
-    return arr.mean(axis=0).tolist()
+        return text
+    logger.info(f"Truncating text from {len(text)} to {max_chars} chars")
+    return text[:max_chars]
 
 
 async def get_embedding(text: str) -> list[float]:
-    """Generate embedding for text using configured provider."""
+    """Generate embedding for text using configured provider.
+
+    Uses truncation as a safety net - embedding_summary should always be
+    concise enough to not need truncation.
+    """
     # Handle empty content
     if not text or not text.strip():
         raise ValueError("Cannot generate embedding for empty text")
@@ -95,22 +60,14 @@ async def get_embedding(text: str) -> list[float]:
     base_name = model.split(":")[0]
     context_tokens = EMBEDDING_MODEL_CONTEXT.get(base_name, DEFAULT_EMBEDDING_CONTEXT)
 
-    # Chunk text if needed
-    chunks = chunk_text(text, context_tokens)
+    # Truncate if needed (safety net - embedding_summary should fit)
+    text = truncate_text(text, context_tokens)
 
-    # Get embeddings for all chunks in parallel
+    # Get embedding
     if config.settings.embedding_provider == "openai":
-        tasks = [_get_openai_embedding(chunk) for chunk in chunks]
+        return await _get_openai_embedding(text)
     else:
-        tasks = [_get_ollama_embedding(chunk) for chunk in chunks]
-
-    embeddings = await asyncio.gather(*tasks)
-
-    # Average embeddings if multiple chunks
-    if len(embeddings) == 1:
-        return embeddings[0]
-
-    return average_embeddings(list(embeddings))
+        return await _get_ollama_embedding(text)
 
 
 async def _get_ollama_embedding(text: str, retries: int = 3) -> list[float]:
