@@ -40,3 +40,10 @@ extension/extension.pem
 
 # Compiled native messaging stub
 backend/native_host/think-native-stub
+backend/native_host/think-native-stub.exe
+backend/native_host/com.think.native.json
+backend/native_host/com.think.native.firefox.json
+
+# PyInstaller
+backend/build/
+backend/*.spec

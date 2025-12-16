@@ -6,24 +6,67 @@ Personal AI assistant for saving and chatting with web content.
 
 ## Setup
 
+### macOS / Linux
+
 ```bash
 # Install dependencies
 pnpm install
 
 # Install backend
 cd backend && poetry install
+
+# Build native messaging stub
+pnpm build:stub
 ```
+
+### Windows
+
+```powershell
+# Run the automated setup script
+.\scripts\setup-windows.ps1
+```
+
+Or manually:
+
+```powershell
+# Install dependencies
+pnpm install
+
+# Install backend (requires Python 3.12)
+cd backend
+poetry env use python3.12  # if you have multiple Python versions
+poetry install
+cd ..
+
+# Build extension and native stub
+pnpm ext
+pnpm build:stub
+```
+
+**Note:** Windows requires Python 3.12 (not 3.13) for full compatibility.
 
 ## Development
 
-```bash
-# Terminal 1: Start backend
-cd backend && poetry run uvicorn app.main:app --reload --port 8765
+### Quick Start (All Platforms)
 
-# Terminal 2: Start Electron app
+```bash
+# Start backend + Electron app together
+pnpm dev
+
+# Or with extension hot-reload
+pnpm dev:all
+```
+
+### Individual Commands
+
+```bash
+# Start backend server
+pnpm backend
+
+# Start Electron app
 pnpm app
 
-# Terminal 3: Watch extension changes
+# Watch extension changes
 pnpm --filter think-extension dev
 ```
 
