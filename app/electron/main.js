@@ -6,6 +6,58 @@ const fs = require('fs');
 const https = require('https');
 const { installNativeHost } = require('./install-native-host');
 
+/**
+ * Download a file with progress reporting.
+ * Uses native https module to avoid blocking the main process.
+ */
+function downloadFile(url, destPath, onProgress) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(destPath);
+
+    const makeRequest = (urlString) => {
+      https.get(urlString, (response) => {
+        // Handle redirects
+        if (response.statusCode === 301 || response.statusCode === 302) {
+          makeRequest(response.headers.location);
+          return;
+        }
+
+        if (response.statusCode !== 200) {
+          reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+          return;
+        }
+
+        const totalSize = parseInt(response.headers['content-length'], 10);
+        let downloadedSize = 0;
+
+        response.on('data', (chunk) => {
+          downloadedSize += chunk.length;
+          if (onProgress && totalSize) {
+            onProgress(Math.round((downloadedSize / totalSize) * 100));
+          }
+        });
+
+        response.pipe(file);
+
+        file.on('finish', () => {
+          file.close();
+          resolve();
+        });
+
+        file.on('error', (err) => {
+          fs.unlink(destPath, () => {}); // Delete partial file
+          reject(err);
+        });
+      }).on('error', (err) => {
+        fs.unlink(destPath, () => {}); // Delete partial file
+        reject(err);
+      });
+    };
+
+    makeRequest(url);
+  });
+}
+
 let mainWindow;
 let pythonProcess;
 let backendReady = false;
@@ -277,12 +329,14 @@ ipcMain.handle('download-ollama', async (_event) => {
       const zipPath = path.join(tempDir, 'Ollama-darwin.zip');
       const downloadUrl = 'https://ollama.com/download/Ollama-darwin.zip';
 
-      mainWindow.webContents.send('ollama-download-progress', { progress: 10, stage: 'downloading' });
+      mainWindow.webContents.send('ollama-download-progress', { progress: 5, stage: 'downloading' });
 
-      // Use curl for reliable redirect handling
-      execSync(`curl -L "${downloadUrl}" -o "${zipPath}"`, { stdio: 'pipe' });
-
-      mainWindow.webContents.send('ollama-download-progress', { progress: 80, stage: 'downloading' });
+      // Async download with progress reporting
+      await downloadFile(downloadUrl, zipPath, (percent) => {
+        // Map 0-100% download progress to 5-80% overall progress
+        const overallProgress = 5 + Math.round(percent * 0.75);
+        mainWindow.webContents.send('ollama-download-progress', { progress: overallProgress, stage: 'downloading' });
+      });
 
       mainWindow.webContents.send('ollama-download-progress', { progress: 100, stage: 'installing' });
 
@@ -315,16 +369,21 @@ ipcMain.handle('download-ollama', async (_event) => {
       const exePath = path.join(tempDir, 'OllamaSetup.exe');
       const downloadUrl = 'https://ollama.com/download/OllamaSetup.exe';
 
-      mainWindow.webContents.send('ollama-download-progress', { progress: 10, stage: 'downloading' });
+      mainWindow.webContents.send('ollama-download-progress', { progress: 5, stage: 'downloading' });
 
-      // Use curl for reliable redirect handling
-      execSync(`curl -L "${downloadUrl}" -o "${exePath}"`, { stdio: 'pipe' });
+      // Async download with progress reporting
+      await downloadFile(downloadUrl, exePath, (percent) => {
+        // Map 0-100% download progress to 5-80% overall progress
+        const overallProgress = 5 + Math.round(percent * 0.75);
+        mainWindow.webContents.send('ollama-download-progress', { progress: overallProgress, stage: 'downloading' });
+      });
 
-      mainWindow.webContents.send('ollama-download-progress', { progress: 80, stage: 'downloading' });
-      mainWindow.webContents.send('ollama-download-progress', { progress: 100, stage: 'installing' });
+      mainWindow.webContents.send('ollama-download-progress', { progress: 85, stage: 'installing' });
 
       // Run silent install
       execSync(`"${exePath}" /VERYSILENT /NORESTART`, { stdio: 'ignore' });
+
+      mainWindow.webContents.send('ollama-download-progress', { progress: 100, stage: 'starting' });
 
       // Launch Ollama
       spawn(ollamaPath, ['serve'], { detached: true, stdio: 'ignore' });
