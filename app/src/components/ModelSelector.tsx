@@ -189,7 +189,7 @@ export function ModelSelector({ type = "chat", provider, selectedModel, onModelC
                 key={model.name}
                 className={cn(
                   "flex items-center justify-between px-3 py-2.5 hover:bg-muted/50 cursor-pointer",
-                  model.name === displayModel && "bg-muted dark:bg-[#242633] text-foreground"
+                  model.name === displayModel && "bg-muted dark:bg-secondary text-foreground"
                 )}
                 onClick={() => model.is_downloaded && selectModel(model.name)}
               >

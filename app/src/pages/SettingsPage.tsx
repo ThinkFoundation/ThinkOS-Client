@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { Check, Circle, Loader2, Monitor, Sun, Moon, AlertTriangle } from "lucide-react";
+import { Check, Circle, Loader2, Monitor, Sun, Moon, AlertTriangle, LogOut } from "lucide-react";
 import { Theme, setTheme, getTheme } from "@/hooks/useSystemTheme";
 import { apiFetch } from "@/lib/api";
 import { ModelSelector } from "@/components/ModelSelector";
@@ -312,10 +312,45 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
   // Progress from the job hook
   const progressPercent = reembedJob.progress;
 
+  const handleLogout = async () => {
+    try {
+      console.log("Logging out...");
+      const res = await apiFetch("/api/auth/logout", {
+        method: "POST",
+      });
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error("Logout failed:", res.status, errorText);
+        alert(`Failed to logout: ${res.status} ${errorText}`);
+        return;
+      }
+      
+      console.log("Logout successful, reloading...");
+      // Reload the app to show the lock screen
+      window.location.reload();
+    } catch (err) {
+      console.error("Failed to logout:", err);
+      alert(`Failed to logout: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
   return (
     <>
       <div className="p-8 max-w-2xl mx-auto">
-        <h1 className="text-2xl font-semibold mb-6">Settings</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-semibold">Settings</h1>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleLogout}
+            className="flex items-center gap-2"
+          >
+            <LogOut className="h-4 w-4" />
+            Logout
+          </Button>
+        </div>
 
         {/* Profile Section */}
         <Card className="mb-6">

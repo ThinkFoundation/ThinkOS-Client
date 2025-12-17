@@ -229,7 +229,7 @@ export function ChatSidebar({ pageContent, pageUrl, pageTitle, onClose }: ChatSi
   return (
     <div className="flex flex-col h-full bg-background text-foreground">
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-border">
+      <div className="flex items-center justify-between px-4 py-3 border-b bg-background/50 backdrop-blur-sm">
         <div className="flex items-center gap-2">
           <img src={chrome.runtime.getURL('branding/Think_OS_Full_Word_Mark-lightmode.svg')} alt="Think" className="h-5 dark:hidden" />
           <img src={chrome.runtime.getURL('branding/Think_OS_Full_Word_Mark.svg')} alt="Think" className="h-5 hidden dark:block" />
@@ -245,7 +245,7 @@ export function ChatSidebar({ pageContent, pageUrl, pageTitle, onClose }: ChatSi
               <MoreHorizontal className="w-4 h-4" />
             </button>
             {showActions && (
-              <div className="absolute right-0 top-full mt-1 w-48 bg-white/70 dark:bg-white/5 backdrop-blur-xl border border-white/60 dark:border-white/10 rounded-lg shadow-lg shadow-black/10 dark:shadow-black/30 z-10 py-1">
+              <div className="absolute right-0 top-full mt-1 w-48 bg-background/50 backdrop-blur-sm border border-border rounded-lg shadow-lg z-10 py-1">
                 <button
                   onClick={handleSavePage}
                   disabled={!!actionLoading}
@@ -305,7 +305,7 @@ export function ChatSidebar({ pageContent, pageUrl, pageTitle, onClose }: ChatSi
       </div>
 
       {/* Page context indicator */}
-      <div className="px-3 py-2 text-xs text-muted-foreground border-b border-border truncate">
+      <div className="px-4 py-2 text-xs text-muted-foreground border-b border-border bg-background/50 backdrop-blur-sm truncate">
         Chatting about: {pageTitle || pageUrl}
       </div>
 
@@ -330,7 +330,7 @@ export function ChatSidebar({ pageContent, pageUrl, pageTitle, onClose }: ChatSi
                 className={`rounded-2xl p-4 ${
                   msg.role === 'user'
                     ? 'bg-primary text-primary-foreground'
-                    : 'bg-white/70 dark:bg-white/5 backdrop-blur-md border border-white/60 dark:border-white/10 shadow-sm shadow-black/5 dark:shadow-black/20 hover:shadow-lg hover:scale-[1.01] hover:-translate-y-0.5 transition-all duration-200'
+                    : 'bg-background/50 backdrop-blur-sm border border-border hover:shadow-lg hover:scale-[1.01] hover:-translate-y-0.5 transition-all duration-200'
                 }`}
               >
                 {msg.role === 'user' ? (
@@ -346,7 +346,7 @@ export function ChatSidebar({ pageContent, pageUrl, pageTitle, onClose }: ChatSi
         ))}
         {loading && (
           <div className="flex justify-start animate-slide-up">
-            <div className="bg-white/70 dark:bg-white/5 backdrop-blur-md border border-white/60 dark:border-white/10 shadow-sm shadow-black/5 dark:shadow-black/20 p-4 rounded-2xl">
+            <div className="bg-background/50 backdrop-blur-sm border border-border p-4 rounded-2xl">
               <span className="inline-block w-2 h-4 bg-current animate-pulse" />
             </div>
           </div>
@@ -408,7 +408,7 @@ export function ChatSidebar({ pageContent, pageUrl, pageTitle, onClose }: ChatSi
               <button
                 key={index}
                 onClick={() => sendMessage(suggestion)}
-                className="px-3 py-1.5 text-xs bg-white/70 dark:bg-white/5 backdrop-blur-md border border-white/60 dark:border-white/10 rounded-full hover:bg-accent hover:border-primary/30 transition-all duration-200 text-left max-w-full truncate"
+                className="px-3 py-1.5 text-xs bg-background/50 backdrop-blur-sm border border-border rounded-full hover:bg-accent hover:border-primary/30 transition-all duration-200 text-left max-w-full truncate"
                 title={suggestion}
               >
                 {suggestion}
@@ -420,7 +420,7 @@ export function ChatSidebar({ pageContent, pageUrl, pageTitle, onClose }: ChatSi
 
       {/* Input */}
       <div className="p-3 border-t border-border">
-        <div className="relative flex items-center gap-2 p-2 rounded-full bg-white/70 dark:bg-white/5 backdrop-blur-xl border border-white/60 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/20">
+        <div className="relative flex items-center gap-2 p-2 rounded-full bg-background/50 backdrop-blur-sm border border-border shadow-lg">
           <input
             ref={inputRef}
             type="text"

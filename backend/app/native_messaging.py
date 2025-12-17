@@ -137,6 +137,8 @@ class NativeMessagingServer:
                 result = await self._save_conversation(params)
             elif method == "chat.summarize":
                 result = await self._summarize_chat(params)
+            elif method == "app.open":
+                result = await self._open_app(params)
             else:
                 return {
                     "id": request_id,
@@ -494,6 +496,14 @@ Title:"""
         asyncio.create_task(process_memory_async(result["id"]))
 
         return {"memory_id": result["id"], "title": title, "summary": summary}
+
+    async def _open_app(self, params: dict) -> dict:
+        """Handle app.open request - opens/shows the app window."""
+        # This is handled by the Electron app via IPC
+        # The native messaging stub will forward this to Electron
+        # For now, just return success - the actual window opening
+        # happens in the Electron main process
+        return {"success": True}
 
 
 # Global server instances

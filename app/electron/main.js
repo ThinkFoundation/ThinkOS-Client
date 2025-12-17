@@ -224,6 +224,38 @@ app.whenReady().then(async () => {
   // Set app name (for dev mode - production uses productName from package.json)
   app.setName('Think');
 
+  // Register protocol handler for think:// URLs
+  if (!app.isDefaultProtocolClient('think')) {
+    app.setAsDefaultProtocolClient('think');
+  }
+
+  // Handle think:// protocol URLs
+  app.on('open-url', (event, url) => {
+    event.preventDefault();
+    handleProtocolUrl(url);
+  });
+
+  // Handle think:// protocol URLs on Windows/Linux (second-instance)
+  const gotTheLock = app.requestSingleInstanceLock();
+  if (!gotTheLock) {
+    app.quit();
+    return;
+  }
+
+  app.on('second-instance', (event, commandLine) => {
+    // Someone tried to run a second instance, focus our window instead
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+
+    // Check for protocol URL in command line arguments
+    const protocolUrl = commandLine.find(arg => arg.startsWith('think://'));
+    if (protocolUrl) {
+      handleProtocolUrl(protocolUrl);
+    }
+  });
+
   // Set dock icon on macOS (for dev mode)
   if (process.platform === 'darwin' && !app.isPackaged) {
     const iconPath = path.join(__dirname, '../public/icons/think-os-agent.png');
@@ -280,8 +312,50 @@ app.on('activate', () => {
         mainWindow.webContents.send('backend-ready', { token: APP_TOKEN });
       });
     }
+  } else {
+    // Bring window to front if it exists
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
   }
 });
+
+/**
+ * Handle think:// protocol URLs
+ */
+function handleProtocolUrl(url) {
+  // Ensure window is created and visible
+  if (!mainWindow) {
+    createWindow();
+  } else {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+
+  // Parse URL and send to renderer
+  // Format: think://memories/123 or think://chats/456
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.once('did-finish-load', () => {
+      mainWindow.webContents.send('protocol-url', { url });
+    });
+    // If already loaded, send immediately
+    if (mainWindow.webContents.isLoading() === false) {
+      mainWindow.webContents.send('protocol-url', { url });
+    }
+  }
+}
+
+// Handle protocol URLs passed as command line arguments (Windows/Linux)
+if (process.platform !== 'darwin') {
+  const protocolUrl = process.argv.find(arg => arg.startsWith('think://'));
+  if (protocolUrl) {
+    // Will be handled after app.whenReady()
+    app.once('ready', () => {
+      handleProtocolUrl(protocolUrl);
+    });
+  }
+}
 
 // IPC handlers
 ipcMain.handle('check-ollama', async () => {

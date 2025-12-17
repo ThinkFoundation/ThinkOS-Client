@@ -9,6 +9,64 @@
       if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
         document.documentElement.classList.add('dark');
       }
+      
+      // Inject fonts immediately before React renders
+      (function() {
+        if (typeof chrome !== 'undefined' && chrome.runtime) {
+          const goudyUrl = chrome.runtime.getURL('fonts/GoudyBookletter1911-Regular.ttf');
+          const interUrl = chrome.runtime.getURL('fonts/Inter-VariableFont_slnt,wght.ttf');
+          
+          const fontFaceCSS = `
+            @font-face {
+              font-family: 'Goudy Bookletter 1911';
+              src: url('${goudyUrl}') format('truetype');
+              font-weight: 400;
+              font-display: swap;
+            }
+            @font-face {
+              font-family: 'Inter';
+              src: url('${interUrl}') format('truetype');
+              font-weight: 100 900;
+              font-style: oblique -10deg 0deg;
+              font-display: swap;
+            }
+          `;
+          
+          const styleEl = document.createElement('style');
+          styleEl.id = 'think-fonts';
+          styleEl.textContent = fontFaceCSS;
+          document.head.appendChild(styleEl);
+        } else {
+          // Fallback: try again after a short delay
+          setTimeout(function() {
+            if (typeof chrome !== 'undefined' && chrome.runtime) {
+              const goudyUrl = chrome.runtime.getURL('fonts/GoudyBookletter1911-Regular.ttf');
+              const interUrl = chrome.runtime.getURL('fonts/Inter-VariableFont_slnt,wght.ttf');
+              
+              const fontFaceCSS = `
+                @font-face {
+                  font-family: 'Goudy Bookletter 1911';
+                  src: url('${goudyUrl}') format('truetype');
+                  font-weight: 400;
+                  font-display: swap;
+                }
+                @font-face {
+                  font-family: 'Inter';
+                  src: url('${interUrl}') format('truetype');
+                  font-weight: 100 900;
+                  font-style: oblique -10deg 0deg;
+                  font-display: swap;
+                }
+              `;
+              
+              const styleEl = document.createElement('style');
+              styleEl.id = 'think-fonts';
+              styleEl.textContent = fontFaceCSS;
+              document.head.appendChild(styleEl);
+            }
+          }, 10);
+        }
+      })();
     </script>
   </head>
   <body>

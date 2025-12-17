@@ -91,16 +91,16 @@ export default function LockScreen({ needsSetup, onUnlock }: Props) {
 
   return (
     <div className={cn(
-      "relative flex items-center justify-center min-h-screen bg-background p-4 transition-opacity duration-500",
+      "relative flex items-center justify-center min-h-screen p-4 transition-opacity duration-500",
       success && "opacity-0"
     )}>
       {/* Animated gradient background orbs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -left-40 w-80 h-80 bg-primary/20 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute -bottom-40 -right-40 w-80 h-80 bg-primary/15 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+        <div className="absolute -top-40 -left-40 w-80 h-80 rounded-full blur-3xl animate-pulse" style={{ backgroundColor: 'hsl(192 61% 59% / 0.2)' }} />
+        <div className="absolute -bottom-40 -right-40 w-80 h-80 rounded-full blur-3xl animate-pulse" style={{ backgroundColor: 'hsl(192 61% 59% / 0.15)', animationDelay: '1s' }} />
       </div>
 
-      <div className="relative w-full max-w-[320px] space-y-8">
+      <div className="relative w-full max-w-[400px] space-y-8">
         {/* Logo */}
         <div className="flex justify-center">
           <img
