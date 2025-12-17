@@ -56,6 +56,15 @@ function WizardLayout({ title, children }: { title?: string; children: React.Rea
   );
 }
 
+const formatPullStatus = (status: string): string => {
+  if (status.startsWith('pulling manifest')) return 'Preparing download...';
+  if (status.startsWith('pulling ')) return 'Downloading model...';
+  if (status.startsWith('verifying')) return 'Verifying download...';
+  if (status.startsWith('writing')) return 'Finalizing...';
+  if (status === 'success') return 'Complete!';
+  return status;
+};
+
 export default function SetupWizard({ onComplete }: Props) {
   const [step, setStep] = useState<SetupStep>('check');
   const [progress, setProgress] = useState(0);
@@ -85,7 +94,7 @@ export default function SetupWizard({ onComplete }: Props) {
         setProgress(data.progress);
       }
       if (data.status) {
-        setStatusText(data.status);
+        setStatusText(formatPullStatus(data.status));
       }
     });
 
@@ -112,17 +121,34 @@ export default function SetupWizard({ onComplete }: Props) {
       if (res.ok) {
         const data = await res.json();
         const models = data.models?.map((m: { name: string }) => m.name) || [];
+        const hasChatModel = models.some((n: string) => n.startsWith('llama3.2'));
         const hasEmbedding = models.some((n: string) => n.startsWith('mxbai-embed-large'));
 
-        if (!hasEmbedding && window.electronAPI) {
+        if ((!hasChatModel || !hasEmbedding) && window.electronAPI) {
           setStep('pulling');
-          setProgress(0);
-          setStatusText('Downloading embedding model...');
-          const result = await window.electronAPI.pullModel('mxbai-embed-large');
-          if (!result.success) {
-            setError(result.error || 'Embedding model download failed');
-            setStep('choose');
-            return;
+
+          // Pull chat model if missing
+          if (!hasChatModel) {
+            setProgress(0);
+            setStatusText('Downloading chat model...');
+            const chatResult = await window.electronAPI.pullModel('llama3.2');
+            if (!chatResult.success) {
+              setError(chatResult.error || 'Chat model download failed');
+              setStep('choose');
+              return;
+            }
+          }
+
+          // Pull embedding model if missing
+          if (!hasEmbedding) {
+            setProgress(0);
+            setStatusText('Downloading embedding model...');
+            const embedResult = await window.electronAPI.pullModel('mxbai-embed-large');
+            if (!embedResult.success) {
+              setError(embedResult.error || 'Embedding model download failed');
+              setStep('choose');
+              return;
+            }
           }
         }
 

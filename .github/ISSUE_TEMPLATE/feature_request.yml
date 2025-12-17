@@ -1,0 +1,55 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your feature suggestion!
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of Think would this affect?
+      options:
+        - App (Desktop)
+        - Backend
+        - Extension (Chrome)
+        - Multiple / Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Motivation
+      description: What problem does this solve? Why do you need this?
+      placeholder: I'm always frustrated when...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How would you like this to work?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any other approaches you've thought about?
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Screenshots, mockups, or other relevant information
+    validations:
+      required: false

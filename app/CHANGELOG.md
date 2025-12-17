@@ -1,5 +1,35 @@
 # think-app
 
+## 0.5.0
+
+### Minor Changes
+
+- c187deb: Add Windows support
+
+  - Windows NSIS installer with desktop/start menu shortcuts
+  - Native messaging host registration via `reg.exe` (removed `winreg` dependency)
+  - Cross-platform Ollama download using native `https` module
+  - Graceful FTS5 fallback when module unavailable
+  - Binary mode for salt file to fix Windows password unlock
+  - Cross-platform build scripts for backend and native stub
+
+### Patch Changes
+
+- b0072ec: fix(app): show setup wizard when configured Ollama model is missing
+
+  Fixes #44
+
+  Previously, if Ollama was installed and running but the configured chat model (e.g., llama3.2) wasn't downloaded, the app would skip the setup wizard and fail when trying to chat.
+
+  Now the app checks if the configured model is actually available before skipping the setup wizard. Also improved the model download progress to show user-friendly status messages instead of raw layer hashes.
+
+- e0559e6: Replace unmaintained pysqlcipher3 with rotki-pysqlcipher3
+
+  - `pysqlcipher3` is no longer maintained (last updated 2021)
+  - `rotki-pysqlcipher3` is actively maintained with cross-platform wheels
+  - Drop-in replacement using the same `pysqlcipher3` import namespace
+  - Python version locked to 3.12.x (rotki-pysqlcipher3 wheels only support 3.11-3.12)
+
 ## 0.4.0
 
 ### Minor Changes

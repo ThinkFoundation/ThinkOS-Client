@@ -42,12 +42,18 @@ async def delete_api_key(provider: str) -> None:
 
 
 def get_or_create_salt() -> str:
-    """Get existing salt or create a new one."""
+    """Get existing salt or create a new one.
+
+    Uses binary mode to avoid Windows UTF-8 BOM issues that can cause
+    the derived key to differ between setup and unlock.
+    """
     salt_path = _get_salt_path()
     if salt_path.exists():
-        return salt_path.read_text().strip()
+        # Read as bytes to avoid encoding issues (BOM on Windows)
+        return salt_path.read_bytes().decode('ascii').strip()
     salt = stdlib_secrets.token_hex(16)
-    salt_path.write_text(salt)
+    # Write as bytes to avoid BOM being added on Windows
+    salt_path.write_bytes(salt.encode('ascii'))
     return salt
 
 

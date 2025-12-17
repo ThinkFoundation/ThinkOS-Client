@@ -1,6 +1,6 @@
 {
   "name": "think-app",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -30,7 +30,8 @@
         "from": "../backend/native_host",
         "to": "backend/native_host",
         "filter": [
-          "think-native-stub"
+          "think-native-stub",
+          "think-native-stub.exe"
         ]
       }
     ],
@@ -45,7 +46,15 @@
     },
     "afterSign": "scripts/notarize.js",
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Think"
     }
   },
   "dependencies": {
@@ -70,11 +79,11 @@
     "dotenv": "^17.2.3",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
+    "png-to-ico": "^3.0.1",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.15",
     "typescript": "^5.6.3",
     "vite": "^6.0.1",
-    "wait-on": "^8.0.1",
-    "winreg": "^1.2.5"
+    "wait-on": "^8.0.1"
   }
 }

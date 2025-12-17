@@ -20,6 +20,7 @@ jobs:
         with:
           generate_release_notes: true
           draft: true
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -141,10 +142,91 @@ jobs:
           path: app/release/*.dmg
           retention-days: 1
 
+  build-windows:
+    name: Build Windows App
+    runs-on: windows-latest
+    needs: create-release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        run: pip install poetry==1.8.0
+
+      - name: Configure Poetry
+        run: poetry config virtualenvs.in-project true
+        working-directory: backend
+
+      - name: Install pnpm dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: poetry install
+
+      - name: Download MSVC-compiled sqlite-vec
+        shell: pwsh
+        run: |
+          # Download MSVC-compiled vec0.dll from sqlite-vec releases
+          $vec0Url = "https://github.com/asg017/sqlite-vec/releases/download/v0.1.6/sqlite-vec-0.1.6-loadable-windows-x86_64.tar.gz"
+          $tarPath = "$env:RUNNER_TEMP\sqlite-vec.tar.gz"
+          $extractPath = "$env:RUNNER_TEMP\sqlite-vec"
+
+          Invoke-WebRequest -Uri $vec0Url -OutFile $tarPath
+          New-Item -ItemType Directory -Path $extractPath -Force
+          tar -xzf $tarPath -C $extractPath
+
+          # Find where sqlite_vec package is installed and copy vec0.dll there
+          $sitePackages = poetry run python -c "import site; print(site.getsitepackages()[0])"
+          $sqliteVecDir = Join-Path $sitePackages "sqlite_vec"
+
+          if (Test-Path $sqliteVecDir) {
+            Copy-Item "$extractPath\vec0.dll" -Destination $sqliteVecDir -Force
+            Write-Host "Copied vec0.dll to $sqliteVecDir"
+          } else {
+            Write-Host "Warning: sqlite_vec directory not found at $sqliteVecDir"
+          }
+        working-directory: backend
+
+      - name: Build backend
+        run: pnpm build:backend
+
+      - name: Build native stub
+        run: pnpm build:stub
+
+      - name: Build app (frontend)
+        run: pnpm --filter think-app build
+
+      - name: Build Electron app (NSIS installer)
+        run: pnpm --filter think-app electron:build
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-app-windows
+          path: app/release/*.exe
+          retention-days: 1
+
   upload-release:
     name: Upload Release Artifacts
     runs-on: ubuntu-latest
-    needs: [create-release, build-extension, build-macos]
+    needs: [create-release, build-extension, build-macos, build-windows]
     permissions:
       contents: write
     steps:
@@ -162,6 +244,7 @@ jobs:
           files: |
             artifacts/chrome-extension/*.zip
             artifacts/electron-app-macos/*.dmg
+            artifacts/electron-app-windows/*.exe
           draft: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

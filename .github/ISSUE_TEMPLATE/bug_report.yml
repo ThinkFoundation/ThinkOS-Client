@@ -1,0 +1,66 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug!
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of Think is affected?
+      options:
+        - App (Desktop)
+        - Backend
+        - Extension (Chrome)
+        - Multiple / Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect to happen?
+      placeholder: |
+        What happened:
+
+        What I expected:
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this issue?
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, browser version, app version, etc.
+      placeholder: |
+        - OS: macOS 14.0
+        - App version: v0.3.0
+        - Browser: Chrome 120 (for extension)
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Screenshots
+      description: Any relevant error messages, logs, or screenshots
+    validations:
+      required: false
