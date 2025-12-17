@@ -208,47 +208,58 @@ def migration_008(conn: Connection) -> None:
         "SELECT name FROM sqlite_master WHERE type='table' AND name='memories_fts'"
     )).fetchone()
 
-    if not result:
-        # Create FTS5 virtual table
-        conn.execute(text("""
-            CREATE VIRTUAL TABLE memories_fts USING fts5(
-                title,
-                content,
-                content='memories',
-                content_rowid='id'
-            )
-        """))
+    if result:
+        return  # Already exists
 
-        # Populate with existing data
-        conn.execute(text("""
+    # Check if FTS5 module is available (not compiled into all SQLite builds,
+    # e.g., rotki-pysqlcipher3 on Windows doesn't include FTS5)
+    try:
+        conn.execute(text("CREATE VIRTUAL TABLE _fts5_test USING fts5(test)"))
+        conn.execute(text("DROP TABLE _fts5_test"))
+    except Exception:
+        print("WARNING: FTS5 module not available - full-text search will be disabled", flush=True)
+        return
+
+    # Create FTS5 virtual table
+    conn.execute(text("""
+        CREATE VIRTUAL TABLE memories_fts USING fts5(
+            title,
+            content,
+            content='memories',
+            content_rowid='id'
+        )
+    """))
+
+    # Populate with existing data
+    conn.execute(text("""
+        INSERT INTO memories_fts(rowid, title, content)
+        SELECT id, COALESCE(title, ''), COALESCE(content, '')
+        FROM memories
+    """))
+
+    # Create triggers to keep FTS in sync
+    conn.execute(text("""
+        CREATE TRIGGER memories_fts_ai AFTER INSERT ON memories BEGIN
             INSERT INTO memories_fts(rowid, title, content)
-            SELECT id, COALESCE(title, ''), COALESCE(content, '')
-            FROM memories
-        """))
+            VALUES (new.id, COALESCE(new.title, ''), COALESCE(new.content, ''));
+        END
+    """))
 
-        # Create triggers to keep FTS in sync
-        conn.execute(text("""
-            CREATE TRIGGER memories_fts_ai AFTER INSERT ON memories BEGIN
-                INSERT INTO memories_fts(rowid, title, content)
-                VALUES (new.id, COALESCE(new.title, ''), COALESCE(new.content, ''));
-            END
-        """))
+    conn.execute(text("""
+        CREATE TRIGGER memories_fts_ad AFTER DELETE ON memories BEGIN
+            INSERT INTO memories_fts(memories_fts, rowid, title, content)
+            VALUES ('delete', old.id, COALESCE(old.title, ''), COALESCE(old.content, ''));
+        END
+    """))
 
-        conn.execute(text("""
-            CREATE TRIGGER memories_fts_ad AFTER DELETE ON memories BEGIN
-                INSERT INTO memories_fts(memories_fts, rowid, title, content)
-                VALUES ('delete', old.id, COALESCE(old.title, ''), COALESCE(old.content, ''));
-            END
-        """))
-
-        conn.execute(text("""
-            CREATE TRIGGER memories_fts_au AFTER UPDATE ON memories BEGIN
-                INSERT INTO memories_fts(memories_fts, rowid, title, content)
-                VALUES ('delete', old.id, COALESCE(old.title, ''), COALESCE(old.content, ''));
-                INSERT INTO memories_fts(rowid, title, content)
-                VALUES (new.id, COALESCE(new.title, ''), COALESCE(new.content, ''));
-            END
-        """))
+    conn.execute(text("""
+        CREATE TRIGGER memories_fts_au AFTER UPDATE ON memories BEGIN
+            INSERT INTO memories_fts(memories_fts, rowid, title, content)
+            VALUES ('delete', old.id, COALESCE(old.title, ''), COALESCE(old.content, ''));
+            INSERT INTO memories_fts(rowid, title, content)
+            VALUES (new.id, COALESCE(new.title, ''), COALESCE(new.content, ''));
+        END
+    """))
 
 
 @migration(9, "Add token usage columns to messages")
