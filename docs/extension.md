@@ -21,6 +21,7 @@ Extension → Native Host (thin C binary) → Python stub → Backend (Unix sock
 
 The native host manifest is automatically installed when the Electron app starts. It registers:
 - macOS: `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.think.native.json`
+- Windows: `%LOCALAPPDATA%\Google\Chrome\User Data\NativeMessagingHosts\com.think.native.json`
 - Linux: `~/.config/google-chrome/NativeMessagingHosts/com.think.native.json`
 
 ## Extension ID
