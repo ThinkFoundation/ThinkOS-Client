@@ -99,9 +99,6 @@ importers:
       wait-on:
         specifier: ^8.0.1
         version: 8.0.5
-      winreg:
-        specifier: ^1.2.5
-        version: 1.2.5
 
   extension:
     dependencies:
@@ -3126,9 +3123,6 @@ packages:
 
   wide-align@1.1.5:
     resolution: {integrity: sha512-eDMORYaPNZ4sQIuuYPDHdQvf4gyCF9rEEV/yPxGfwPkRodwEgiMUUXTx/dex+Me0wxx53S+NgUHaP7y3MGlDmg==}
-
-  winreg@1.2.5:
-    resolution: {integrity: sha512-uf7tHf+tw0B1y+x+mKTLHkykBgK2KMs3g+KlzmyMbLvICSHQyB/xOFjTT8qZ3oeTFyU7Bbj4FzXitGG6jvKhYw==}
 
   wrap-ansi@7.0.0:
     resolution: {integrity: sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==}
@@ -6587,8 +6581,6 @@ snapshots:
   wide-align@1.1.5:
     dependencies:
       string-width: 4.2.3
-
-  winreg@1.2.5: {}
 
   wrap-ansi@7.0.0:
     dependencies:
