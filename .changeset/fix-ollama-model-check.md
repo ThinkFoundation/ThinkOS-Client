@@ -1,5 +1,5 @@
 ---
-"think": patch
+"think-app": patch
 ---
 
 fix(app): show setup wizard when configured Ollama model is missing
