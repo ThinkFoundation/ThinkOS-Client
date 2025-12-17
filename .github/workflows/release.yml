@@ -167,11 +167,11 @@ jobs:
           python-version: '3.12'
 
       - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: '1.8.0'
-          virtualenvs-create: true
-          virtualenvs-in-project: true
+        run: pip install poetry==1.8.0
+
+      - name: Configure Poetry
+        run: poetry config virtualenvs.in-project true
+        working-directory: backend
 
       - name: Install pnpm dependencies
         run: pnpm install --frozen-lockfile
