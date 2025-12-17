@@ -361,23 +361,21 @@ Summary:"""
         # Get AI response
         response = await chat(message, context=context, history=history)
 
-        # Generate follow-up suggestions
-        followups = []
-        try:
-            logger.info(f"Generating follow-ups for: {message[:50]}...")
-            followups = await generate_followup_suggestions(message, response, sources)
-            if followups:
-                logger.info(f"Generated {len(followups)} follow-ups: {followups}")
-            else:
-                logger.info("No follow-ups generated (empty list returned)")
-        except Exception as e:
-            logger.error(f"Follow-up generation failed: {e}", exc_info=True)
-
         result = {"response": response, "sources": sources}
 
-        # Include follow-ups if generated
-        if followups:
-            result["followups"] = followups
+        # Generate follow-up suggestions (with short timeout to avoid blocking)
+        # Skip for cloud providers to reduce latency
+        try:
+            followups = await asyncio.wait_for(
+                generate_followup_suggestions(message, response, sources),
+                timeout=10.0  # 10 second timeout for follow-ups
+            )
+            if followups:
+                result["followups"] = followups
+        except asyncio.TimeoutError:
+            logger.warning("Follow-up generation timed out, skipping")
+        except Exception as e:
+            logger.warning(f"Follow-up generation failed: {e}")
 
         # Include page summary for frontend caching (only on first message)
         if return_page_summary:

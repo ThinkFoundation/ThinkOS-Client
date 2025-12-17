@@ -36,18 +36,23 @@ class NativeClient {
    */
   connect(): boolean {
     if (this.port) {
+      console.log('[Think Native] Already connected');
       return true;
     }
 
     try {
+      console.log('[Think Native] Connecting to native host...');
       this.port = chrome.runtime.connectNative(NATIVE_HOST_NAME);
       this.connectionError = null;
+      console.log('[Think Native] Connected successfully');
 
       this.port.onMessage.addListener((response: NativeResponse) => {
+        console.log('[Think Native] Received response for:', response.id);
         const pending = this.pending.get(response.id);
         if (pending) {
           clearTimeout(pending.timeout);
           if (response.error) {
+            console.error('[Think Native] Response error:', response.error.message);
             pending.reject(new Error(response.error.message));
           } else {
             pending.resolve(response.result);
@@ -58,6 +63,7 @@ class NativeClient {
 
       this.port.onDisconnect.addListener(() => {
         const error = chrome.runtime.lastError?.message || "Native host disconnected";
+        console.error('[Think Native] Disconnected:', error);
         this.connectionError = error;
         this.port = null;
 
@@ -72,6 +78,7 @@ class NativeClient {
       return true;
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown connection error";
+      console.error('[Think Native] Connection failed:', message);
       this.connectionError = message;
       return false;
     }
@@ -97,13 +104,15 @@ class NativeClient {
     const request: NativeRequest = { id, method, params };
 
     return new Promise<T>((resolve, reject) => {
-      // Set timeout
+      console.log('[Think Native] Sending request:', method, id);
+      // Set timeout (90 seconds for cloud AI providers which can be slow)
       const timeout = setTimeout(() => {
         if (this.pending.has(id)) {
+          console.error('[Think Native] Request timed out:', id);
           this.pending.delete(id);
           reject(new Error("Request timed out"));
         }
-      }, 30000);
+      }, 90000);
 
       this.pending.set(id, {
         resolve: resolve as (value: unknown) => void,
