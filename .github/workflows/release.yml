@@ -184,12 +184,13 @@ jobs:
         shell: pwsh
         run: |
           # Download MSVC-compiled vec0.dll from sqlite-vec releases
-          $vec0Url = "https://github.com/asg017/sqlite-vec/releases/download/v0.1.6/sqlite-vec-0.1.6-loadable-windows-x86_64.zip"
-          $zipPath = "$env:RUNNER_TEMP\sqlite-vec.zip"
+          $vec0Url = "https://github.com/asg017/sqlite-vec/releases/download/v0.1.6/sqlite-vec-0.1.6-loadable-windows-x86_64.tar.gz"
+          $tarPath = "$env:RUNNER_TEMP\sqlite-vec.tar.gz"
           $extractPath = "$env:RUNNER_TEMP\sqlite-vec"
 
-          Invoke-WebRequest -Uri $vec0Url -OutFile $zipPath
-          Expand-Archive -Path $zipPath -DestinationPath $extractPath
+          Invoke-WebRequest -Uri $vec0Url -OutFile $tarPath
+          New-Item -ItemType Directory -Path $extractPath -Force
+          tar -xzf $tarPath -C $extractPath
 
           # Find where sqlite_vec package is installed and copy vec0.dll there
           $sitePackages = poetry run python -c "import site; print(site.getsitepackages()[0])"
