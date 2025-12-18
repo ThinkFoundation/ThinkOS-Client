@@ -4,9 +4,14 @@ Thanks for your interest in contributing!
 
 ## Reporting Issues
 
-- Search existing issues before opening a new one
-- Include steps to reproduce, expected vs actual behavior
-- For bugs, include your OS and relevant versions
+Before opening an issue, search existing issues to avoid duplicates.
+
+**Use the issue templates:**
+- **Bug Report** - Something isn't working as expected
+- **Feature Request** - Suggest a new feature or enhancement
+- **Documentation** - Report missing or unclear docs
+
+Blank issues are disabled - please use one of the templates above.
 
 ## Development Setup
 
@@ -77,11 +82,14 @@ Every PR that changes functionality should include a changeset.
 
 ## Pull Requests
 
-1. Fork the repo and create your branch from `main`
-2. Make your changes
-3. Run `pnpm changeset` to create a changeset
-4. Test your changes locally
-5. Submit a PR with a clear description
+**Every PR must reference an Issue.** CI will fail if no issue is linked.
+
+1. Create an issue first (bug, feature, or docs)
+2. Fork the repo and create your branch from `main`
+3. Make your changes
+4. Run `pnpm changeset` to create a changeset
+5. Test your changes locally
+6. Submit a PR with `Closes #<issue-number>` in the description
 
 ## Code Style
 

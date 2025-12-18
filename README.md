@@ -4,6 +4,25 @@
 
 Personal AI assistant for saving and chatting with web content.
 
+![Think App Screenshot](screenshot.png)
+
+## Prerequisites
+
+- [Node.js](https://nodejs.org/) 20+
+- [pnpm](https://pnpm.io/) (not npm/yarn)
+- [Python](https://www.python.org/) 3.12
+- [Poetry](https://python-poetry.org/)
+- [Ollama](https://ollama.ai/) (optional - app can auto-install)
+
+## Platform Notes
+
+**macOS**: Install sqlcipher for database encryption:
+```bash
+brew install sqlcipher
+```
+
+**Windows**: Works out of the box. Ensure Python 3.12 is in PATH.
+
 ## Setup
 
 ```bash

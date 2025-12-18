@@ -106,6 +106,23 @@ function App() {
           setAppState("ai_setup");
           return;
         }
+
+        // Check if the configured model is actually downloaded
+        const modelsRes = await apiFetch("/api/settings/models?provider=ollama");
+        const modelsData = await modelsRes.json();
+
+        // Check if current_model exists in the available models list
+        const hasConfiguredModel = modelsData.models?.some(
+          (m: { name: string }) =>
+            m.name === modelsData.current_model ||
+            m.name.startsWith(modelsData.current_model + ":")
+        );
+
+        if (!hasConfiguredModel) {
+          // Configured model not downloaded - show setup wizard
+          setAppState("ai_setup");
+          return;
+        }
       }
     } catch {
       // If checks fail, proceed to app (don't block on check failure)
