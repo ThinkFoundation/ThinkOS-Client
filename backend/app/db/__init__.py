@@ -1,4 +1,4 @@
-from .core import init_db, is_db_initialized, db_exists, DB_PATH
+from .core import init_db, is_db_initialized, db_exists, DB_PATH, reset_db_connection
 from .crud import (
     create_memory,
     get_memories,
@@ -29,6 +29,7 @@ __all__ = [
     "is_db_initialized",
     "db_exists",
     "DB_PATH",
+    "reset_db_connection",
     "create_memory",
     "get_memories",
     "get_memory",

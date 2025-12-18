@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from ..config import reload_settings
-from ..db import init_db, is_db_initialized, db_exists
+from ..db import init_db, is_db_initialized, db_exists, reset_db_connection
 from ..services.secrets import derive_db_key, set_api_key, get_api_key, delete_api_key
 from ..schemas import SetPasswordRequest, UnlockRequest, ApiKeyRequest
 
@@ -65,4 +65,11 @@ async def check_api_key(provider: str):
 async def remove_api_key(provider: str):
     """Remove an API key from the database."""
     await delete_api_key(provider)
+    return {"success": True}
+
+
+@router.post("/auth/logout")
+async def logout():
+    """Logout by resetting the database connection (locks the app)."""
+    reset_db_connection()
     return {"success": True}

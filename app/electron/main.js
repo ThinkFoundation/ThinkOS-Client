@@ -6,6 +6,58 @@ const fs = require('fs');
 const https = require('https');
 const { installNativeHost } = require('./install-native-host');
 
+/**
+ * Download a file with progress reporting.
+ * Uses native https module to avoid blocking the main process.
+ */
+function downloadFile(url, destPath, onProgress) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(destPath);
+
+    const makeRequest = (urlString) => {
+      https.get(urlString, (response) => {
+        // Handle redirects
+        if (response.statusCode === 301 || response.statusCode === 302) {
+          makeRequest(response.headers.location);
+          return;
+        }
+
+        if (response.statusCode !== 200) {
+          reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+          return;
+        }
+
+        const totalSize = parseInt(response.headers['content-length'], 10);
+        let downloadedSize = 0;
+
+        response.on('data', (chunk) => {
+          downloadedSize += chunk.length;
+          if (onProgress && totalSize) {
+            onProgress(Math.round((downloadedSize / totalSize) * 100));
+          }
+        });
+
+        response.pipe(file);
+
+        file.on('finish', () => {
+          file.close();
+          resolve();
+        });
+
+        file.on('error', (err) => {
+          fs.unlink(destPath, () => {}); // Delete partial file
+          reject(err);
+        });
+      }).on('error', (err) => {
+        fs.unlink(destPath, () => {}); // Delete partial file
+        reject(err);
+      });
+    };
+
+    makeRequest(url);
+  });
+}
+
 let mainWindow;
 let pythonProcess;
 let backendReady = false;
@@ -172,6 +224,38 @@ app.whenReady().then(async () => {
   // Set app name (for dev mode - production uses productName from package.json)
   app.setName('Think');
 
+  // Register protocol handler for think:// URLs
+  if (!app.isDefaultProtocolClient('think')) {
+    app.setAsDefaultProtocolClient('think');
+  }
+
+  // Handle think:// protocol URLs
+  app.on('open-url', (event, url) => {
+    event.preventDefault();
+    handleProtocolUrl(url);
+  });
+
+  // Handle think:// protocol URLs on Windows/Linux (second-instance)
+  const gotTheLock = app.requestSingleInstanceLock();
+  if (!gotTheLock) {
+    app.quit();
+    return;
+  }
+
+  app.on('second-instance', (event, commandLine) => {
+    // Someone tried to run a second instance, focus our window instead
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+
+    // Check for protocol URL in command line arguments
+    const protocolUrl = commandLine.find(arg => arg.startsWith('think://'));
+    if (protocolUrl) {
+      handleProtocolUrl(protocolUrl);
+    }
+  });
+
   // Set dock icon on macOS (for dev mode)
   if (process.platform === 'darwin' && !app.isPackaged) {
     const iconPath = path.join(__dirname, '../public/icons/think-os-agent.png');
@@ -228,8 +312,50 @@ app.on('activate', () => {
         mainWindow.webContents.send('backend-ready', { token: APP_TOKEN });
       });
     }
+  } else {
+    // Bring window to front if it exists
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
   }
 });
+
+/**
+ * Handle think:// protocol URLs
+ */
+function handleProtocolUrl(url) {
+  // Ensure window is created and visible
+  if (!mainWindow) {
+    createWindow();
+  } else {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+
+  // Parse URL and send to renderer
+  // Format: think://memories/123 or think://chats/456
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.once('did-finish-load', () => {
+      mainWindow.webContents.send('protocol-url', { url });
+    });
+    // If already loaded, send immediately
+    if (mainWindow.webContents.isLoading() === false) {
+      mainWindow.webContents.send('protocol-url', { url });
+    }
+  }
+}
+
+// Handle protocol URLs passed as command line arguments (Windows/Linux)
+if (process.platform !== 'darwin') {
+  const protocolUrl = process.argv.find(arg => arg.startsWith('think://'));
+  if (protocolUrl) {
+    // Will be handled after app.whenReady()
+    app.once('ready', () => {
+      handleProtocolUrl(protocolUrl);
+    });
+  }
+}
 
 // IPC handlers
 ipcMain.handle('check-ollama', async () => {
@@ -277,12 +403,14 @@ ipcMain.handle('download-ollama', async (_event) => {
       const zipPath = path.join(tempDir, 'Ollama-darwin.zip');
       const downloadUrl = 'https://ollama.com/download/Ollama-darwin.zip';
 
-      mainWindow.webContents.send('ollama-download-progress', { progress: 10, stage: 'downloading' });
+      mainWindow.webContents.send('ollama-download-progress', { progress: 5, stage: 'downloading' });
 
-      // Use curl for reliable redirect handling
-      execSync(`curl -L "${downloadUrl}" -o "${zipPath}"`, { stdio: 'pipe' });
-
-      mainWindow.webContents.send('ollama-download-progress', { progress: 80, stage: 'downloading' });
+      // Async download with progress reporting
+      await downloadFile(downloadUrl, zipPath, (percent) => {
+        // Map 0-100% download progress to 5-80% overall progress
+        const overallProgress = 5 + Math.round(percent * 0.75);
+        mainWindow.webContents.send('ollama-download-progress', { progress: overallProgress, stage: 'downloading' });
+      });
 
       mainWindow.webContents.send('ollama-download-progress', { progress: 100, stage: 'installing' });
 
@@ -315,16 +443,21 @@ ipcMain.handle('download-ollama', async (_event) => {
       const exePath = path.join(tempDir, 'OllamaSetup.exe');
       const downloadUrl = 'https://ollama.com/download/OllamaSetup.exe';
 
-      mainWindow.webContents.send('ollama-download-progress', { progress: 10, stage: 'downloading' });
+      mainWindow.webContents.send('ollama-download-progress', { progress: 5, stage: 'downloading' });
 
-      // Use curl for reliable redirect handling
-      execSync(`curl -L "${downloadUrl}" -o "${exePath}"`, { stdio: 'pipe' });
+      // Async download with progress reporting
+      await downloadFile(downloadUrl, exePath, (percent) => {
+        // Map 0-100% download progress to 5-80% overall progress
+        const overallProgress = 5 + Math.round(percent * 0.75);
+        mainWindow.webContents.send('ollama-download-progress', { progress: overallProgress, stage: 'downloading' });
+      });
 
-      mainWindow.webContents.send('ollama-download-progress', { progress: 80, stage: 'downloading' });
-      mainWindow.webContents.send('ollama-download-progress', { progress: 100, stage: 'installing' });
+      mainWindow.webContents.send('ollama-download-progress', { progress: 85, stage: 'installing' });
 
       // Run silent install
       execSync(`"${exePath}" /VERYSILENT /NORESTART`, { stdio: 'ignore' });
+
+      mainWindow.webContents.send('ollama-download-progress', { progress: 100, stage: 'starting' });
 
       // Launch Ollama
       spawn(ollamaPath, ['serve'], { detached: true, stdio: 'ignore' });

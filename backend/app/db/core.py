@@ -128,3 +128,15 @@ def is_db_initialized() -> bool:
 def db_exists() -> bool:
     """Check if the database file exists (password was set)."""
     return DB_PATH.exists()
+
+
+def reset_db_connection():
+    """Reset the database connection (logout/lock)."""
+    global _engine, _session_maker, _db_key
+    
+    if _engine:
+        _engine.dispose()
+    
+    _engine = None
+    _session_maker = None
+    _db_key = None

@@ -61,7 +61,7 @@ app.add_middleware(
 )
 
 # Paths that don't require unlock
-PUBLIC_PATHS = {"/health", "/api/auth/status", "/api/auth/setup", "/api/auth/unlock"}
+PUBLIC_PATHS = {"/health", "/api/auth/status", "/api/auth/setup", "/api/auth/unlock", "/api/auth/logout"}
 
 
 @app.middleware("http")
