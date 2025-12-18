@@ -18,7 +18,7 @@ from ..services.memory_filtering import filter_memories_dynamically, format_memo
 from ..db.search import search_similar_memories
 from ..schemas import ChatRequest
 from .. import config
-from ..db.crud import create_conversation, add_message, update_conversation_title, get_conversation
+from ..db.crud import create_conversation, add_message, update_conversation_title, get_conversation, get_memory
 from ..events import event_manager, MemoryEvent, EventType
 
 logger = logging.getLogger(__name__)
@@ -51,18 +51,41 @@ async def chat_suggestions():
         }
 
 
-async def _retrieve_context(message: str, history: list[dict]) -> tuple[str, list[dict]]:
+async def _retrieve_context(
+    message: str, history: list[dict], attached_memory_ids: list[int] | None = None
+) -> tuple[str, list[dict]]:
     """Retrieve relevant context and sources using RAG.
+
+    If attached_memory_ids are provided, those memories are included as primary context.
+    RAG retrieval still runs to supplement with additional relevant memories.
 
     Returns:
         tuple[str, list[dict]]: (context string, list of source dicts)
     """
     context = ""
     sources = []
+    attached_context = ""
+
+    # Handle explicitly attached memories first
+    if attached_memory_ids:
+        attached_memories = []
+        for memory_id in attached_memory_ids:
+            memory = await get_memory(memory_id)
+            if memory:
+                attached_memories.append(memory)
+                sources.append({
+                    "id": memory["id"],
+                    "title": memory["title"],
+                    "url": memory.get("url"),
+                })
+
+        if attached_memories:
+            attached_context = "## User's Selected Memory:\n" + format_memories_as_context(attached_memories)
+            logger.info(f"Using {len(attached_memories)} attached memories as context")
 
     # Skip RAG for very short messages (< 10 chars)
     if len(message.strip()) < 10:
-        return context, sources
+        return attached_context, sources
 
     try:
         # Check for special prompts that need date-based retrieval
@@ -71,7 +94,13 @@ async def _retrieve_context(message: str, history: list[dict]) -> tuple[str, lis
         if special_handler:
             # Use special handler (date-based retrieval) for generic prompts
             logger.info(f"Using special handler: {special_handler}")
-            context, sources = await execute_special_handler(special_handler, message)
+            handler_context, handler_sources = await execute_special_handler(special_handler, message)
+            context = handler_context
+            # Extend sources instead of replacing (preserve attached memory sources)
+            attached_ids = {s["id"] for s in sources}
+            for s in handler_sources:
+                if s["id"] not in attached_ids:
+                    sources.append(s)
         else:
             # Normal RAG flow with embedding search
             # Query rewriting for follow-up messages
@@ -92,21 +121,27 @@ async def _retrieve_context(message: str, history: list[dict]) -> tuple[str, lis
                 # Filter using dynamic threshold with model-specific thresholds
                 filtered_memories = filter_memories_dynamically(similar_memories, embedding_model=embedding_model)
                 context = format_memories_as_context(filtered_memories)
-                # Build sources list from filtered memories
-                sources = [
-                    {
-                        "id": m["id"],
-                        "title": m["title"],
-                        "url": m.get("url"),
-                        "distance": m.get("distance"),
-                        "match_type": m.get("match_type", "vector"),
-                        "rrf_score": m.get("rrf_score"),
-                    }
-                    for m in filtered_memories
-                ]
+                # Build sources list from filtered memories, avoiding duplicates with attached
+                attached_ids = {s["id"] for s in sources}
+                for m in filtered_memories:
+                    if m["id"] not in attached_ids:
+                        sources.append({
+                            "id": m["id"],
+                            "title": m["title"],
+                            "url": m.get("url"),
+                            "distance": m.get("distance"),
+                            "match_type": m.get("match_type", "vector"),
+                            "rrf_score": m.get("rrf_score"),
+                        })
     except Exception as e:
         # RAG is an enhancement, not required - log and continue
         logger.error(f"RAG retrieval error: {e}")
+
+    # Combine attached context with RAG context
+    if attached_context and context:
+        context = f"{attached_context}\n\n## Related Context:\n{context}"
+    elif attached_context:
+        context = attached_context
 
     return context, sources
 
@@ -157,7 +192,7 @@ async def chat(request: ChatRequest):
         ]
 
     # --- RAG: Retrieve relevant memories ---
-    context, sources = await _retrieve_context(request.message, history)
+    context, sources = await _retrieve_context(request.message, history, request.attached_memory_ids)
 
     try:
         response = await ai_chat(request.message, context=context, history=history)
@@ -247,7 +282,7 @@ async def chat_stream(request: ChatRequest):
         ]
 
     # RAG: Retrieve relevant memories
-    context, sources = await _retrieve_context(request.message, history)
+    context, sources = await _retrieve_context(request.message, history, request.attached_memory_ids)
 
     async def generate():
         full_response = ""

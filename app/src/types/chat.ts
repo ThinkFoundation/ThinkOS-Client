@@ -6,6 +6,13 @@ export interface SourceMemory {
   url?: string;
 }
 
+export interface AttachedMemory {
+  id: number;
+  title: string;
+  type: "web" | "note";
+  url?: string;
+}
+
 export interface TokenUsage {
   prompt_tokens: number;
   completion_tokens: number;

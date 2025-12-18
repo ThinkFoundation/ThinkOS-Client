@@ -82,7 +82,7 @@ export function MemoryDetailPanel({
 
   const titleInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-  const { startNewChat, setPendingMessage } = useConversation();
+  const { startNewChat, addAttachedMemory } = useConversation();
 
   // Listen for SSE updates to refresh memory data (e.g., after summary regeneration)
   useMemoryEvents({
@@ -227,12 +227,16 @@ export function MemoryDetailPanel({
 
   const handleAddToConversation = () => {
     if (!memory) return;
-    // Set pending message and navigate to home
-    const prompt = `Tell me about "${memory.title}"`;
-    setPendingMessage(prompt);
+    // Clear first, then attach memory (order matters - startNewChat clears attachments)
     startNewChat();
+    addAttachedMemory({
+      id: memory.id,
+      title: memory.title,
+      type: memory.type,
+      url: memory.url || undefined,
+    });
     onClose();
-    navigate("/");
+    navigate("/chat");
   };
 
   const handleRemoveTag = async (tagId: number) => {
