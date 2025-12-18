@@ -6,9 +6,10 @@
 }
 
 @font-face {
-  font-family: 'Work Sans';
-  src: url('/fonts/WorkSans-VariableFont_wght.ttf') format('truetype');
+  font-family: 'Inter';
+  src: url('/fonts/Inter-VariableFont_slnt,wght.ttf') format('truetype');
   font-weight: 100 900;
+  font-style: oblique -10deg 0deg;
   font-display: swap;
 }
 
@@ -19,9 +20,9 @@
 @layer base {
   :root {
     /* Backgrounds */
-    --background: 40 100% 99%;        /* #FFFEFC - Warm white */
-    --card: 60 1% 99.8%;              /* #FFFFFE - Pure white cards */
-    --popover: 60 1% 99.8%;
+    --background: 0 0% 99.4%;          /* #FDFEFD - Matches card background (neutral white) */
+    --card: 0 0% 99.4%;                /* #FDFEFD - Card background (neutral white) */
+    --popover: 0 0% 99.4%;             /* #FDFEFD - Matches card background */
 
     /* Text */
     --foreground: 0 0% 3.9%;       /* Dark navy text */
@@ -63,23 +64,23 @@
   }
 
   .dark {
-    --background: 0 0% 3.9%;            /* Near black */
+    --background: 0 0% 5%;            /* #0D0D0D - Dark gray base */
     --foreground: 0 0% 98%;         /* Warm white text */
-    --card: 0 0% 3.9%;              /* Dark blue-gray cards */
+    --card: 232 53% 8%;              /* #0A0D21 - Dark blue-gray cards */
     --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
+    --popover: 0 0% 5%;                 /* #0C0C0C - Dark dropdown background */
     --popover-foreground: 0 0% 98%;
-    --primary: 192 61% 59%;           /* Same Think Turquoise */
+    --primary: 192 61% 59%;           /* Think Turquoise - CTA color */
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 14.9%;
+    --secondary: 232 17% 17%;           /* #242633 - Matches active selection */
     --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
+    --muted: 232 17% 17%;               /* #242633 - Matches active selection for hover */
     --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
+    --accent: 232 17% 17%;              /* #242633 - Matches active selection for hover */
     --accent-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 192 61% 59%;              /* Same Think Turquoise */
+    --border: 232 8% 20%;               /* #303138 - Accessible border color for dark mode */
+    --input: 232 8% 20%;                /* #303138 - Accessible input border for dark mode */
+    --ring: 192 61% 59%;              /* Think Turquoise */
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
     --chart-1: 220 70% 50%;
@@ -101,10 +102,16 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Work Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     background-image:
+      radial-gradient(at 0% 0%, hsl(192 61% 59% / 0.1) 0%, transparent 50%),
+      radial-gradient(at 100% 100%, hsl(192 61% 59% / 0.1) 0%, transparent 50%);
+  }
+  :root.dark body {
+    background-image:
+      linear-gradient(to bottom right, hsl(var(--background)) 0%, hsl(var(--card)) 100%),
       radial-gradient(at 0% 0%, hsl(192 61% 59% / 0.1) 0%, transparent 50%),
       radial-gradient(at 100% 100%, hsl(192 61% 59% / 0.1) 0%, transparent 50%);
   }
