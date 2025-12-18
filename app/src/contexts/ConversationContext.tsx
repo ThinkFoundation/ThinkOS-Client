@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from "react";
 import { apiFetch } from "@/lib/api";
-import type { Conversation, ChatMessage, ConversationDetail, SourceMemory, TokenUsage } from "@/types/chat";
+import type { Conversation, ChatMessage, ConversationDetail, SourceMemory, TokenUsage, AttachedMemory } from "@/types/chat";
 
 interface ConversationContextType {
   currentConversationId: number | null;
@@ -11,6 +11,7 @@ interface ConversationContextType {
   estimatedTokens: number;  // Estimated conversation tokens (stable, grows with messages)
   billingUsage: TokenUsage | null;  // Cumulative (for cost tracking)
   contextWindow: number;
+  attachedMemories: AttachedMemory[];
   selectConversation: (conversation: Conversation | null) => void;
   startNewChat: () => void;
   setCurrentConversationId: (id: number | null) => void;
@@ -19,6 +20,9 @@ interface ConversationContextType {
   clearMessages: () => void;
   setPendingMessage: (message: string | null) => void;
   updateContextWindow: (contextWindow: number) => void;
+  addAttachedMemory: (memory: AttachedMemory) => void;
+  removeAttachedMemory: (memoryId: number) => void;
+  clearAttachedMemories: () => void;
 }
 
 const ConversationContext = createContext<ConversationContextType | null>(null);
@@ -37,6 +41,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [billingUsage, setBillingUsage] = useState<TokenUsage | null>(null);  // Cumulative
   const [contextWindow, setContextWindow] = useState(128000);
+  const [attachedMemories, setAttachedMemories] = useState<AttachedMemory[]>([]);
 
   // Estimate conversation tokens from messages (stable, grows with conversation)
   const estimatedTokens = useMemo(() => {
@@ -121,6 +126,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     setCurrentConversationId(null);
     setMessages([]);
     setBillingUsage(null);
+    setAttachedMemories([]);
   }, []);
 
   const addMessage = useCallback((message: ChatMessage) => {
@@ -137,6 +143,22 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     setMessages([]);
   }, []);
 
+  const addAttachedMemory = useCallback((memory: AttachedMemory) => {
+    setAttachedMemories((prev) => {
+      // Prevent duplicates
+      if (prev.some((m) => m.id === memory.id)) return prev;
+      return [...prev, memory];
+    });
+  }, []);
+
+  const removeAttachedMemory = useCallback((memoryId: number) => {
+    setAttachedMemories((prev) => prev.filter((m) => m.id !== memoryId));
+  }, []);
+
+  const clearAttachedMemories = useCallback(() => {
+    setAttachedMemories([]);
+  }, []);
+
   return (
     <ConversationContext.Provider
       value={{
@@ -148,6 +170,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         estimatedTokens,
         billingUsage,
         contextWindow,
+        attachedMemories,
         selectConversation,
         startNewChat,
         setCurrentConversationId,
@@ -156,6 +179,9 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         clearMessages,
         setPendingMessage,
         updateContextWindow,
+        addAttachedMemory,
+        removeAttachedMemory,
+        clearAttachedMemories,
       }}
     >
       {children}

@@ -5,6 +5,7 @@ import { ChatMessageList } from "@/components/ChatMessageList";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { ChatSourcesPanel } from "@/components/ChatSourcesPanel";
 import { ContextUsageIndicator } from "@/components/ContextUsageIndicator";
+import { AttachedMemoryChips } from "@/components/AttachedMemoryChips";
 import { useConversation } from "@/contexts/ConversationContext";
 import { useConversations } from "@/hooks/useConversations";
 import type { ChatMessage } from "@/types/chat";
@@ -31,6 +32,7 @@ export default function ChatPage() {
     estimatedTokens,
     billingUsage,
     contextWindow,
+    attachedMemories,
     setCurrentConversationId,
     addMessage,
     updateMessage,
@@ -38,6 +40,8 @@ export default function ChatPage() {
     startNewChat,
     setPendingMessage,
     updateContextWindow,
+    removeAttachedMemory,
+    clearAttachedMemories,
   } = useConversation();
 
   const { conversations } = useConversations();
@@ -57,6 +61,10 @@ export default function ChatPage() {
 
     // Clear previous follow-up suggestions when sending a new message
     setFollowupSuggestions([]);
+
+    // Capture attached memories before clearing (they're consumed with this message)
+    const memoriesToSend = [...attachedMemories];
+    clearAttachedMemories();
 
     // FIX: Handle conversation ID race condition
     // If no conversation ID and another message is already creating one, wait for it
@@ -109,6 +117,7 @@ export default function ChatPage() {
         body: JSON.stringify({
           message: userMessage.content,
           conversation_id: effectiveConversationId,
+          attached_memory_ids: memoriesToSend.length > 0 ? memoriesToSend.map((m) => m.id) : undefined,
         }),
       });
 
@@ -216,7 +225,7 @@ export default function ChatPage() {
       // Clear pending conversation ref
       pendingConversationRef.current = null;
     }
-  }, [addMessage, updateMessage, setCurrentConversationId, updateContextWindow]);
+  }, [addMessage, updateMessage, setCurrentConversationId, updateContextWindow, attachedMemories, clearAttachedMemories]);
 
   // Handler for manual chat input
   const handleChat = useCallback(() => {
@@ -240,11 +249,12 @@ export default function ChatPage() {
   useEffect(() => {
     if (isStartingNewChatRef.current) return;
     if (wantsNewChatRef.current) return;
+    if (attachedMemories.length > 0) return; // Don't auto-load if memories attached
     if (currentConversationId || messages.length > 0) return;
     if (conversations.length === 0) return;
 
     selectConversation(conversations[0]);
-  }, [currentConversationId, conversations, messages.length, selectConversation]);
+  }, [currentConversationId, conversations, messages.length, selectConversation, attachedMemories.length]);
 
   return (
     <div className="flex h-full">
@@ -273,6 +283,14 @@ export default function ChatPage() {
         {/* Floating input at bottom */}
         <div className="flex-none p-4">
           <div className="max-w-2xl mx-auto">
+            {/* Attached memory chips */}
+            {attachedMemories.length > 0 && (
+              <AttachedMemoryChips
+                memories={attachedMemories}
+                onRemove={removeAttachedMemory}
+                className="mb-2"
+              />
+            )}
             <div className="flex items-center gap-2">
               <div className="flex-1">
                 <ChatInput
@@ -280,7 +298,11 @@ export default function ChatPage() {
                   onChange={setMessage}
                   onSubmit={handleChat}
                   isLoading={isLoading}
-                  placeholder="Type your message..."
+                  placeholder={
+                    attachedMemories.length > 0
+                      ? `Ask about ${attachedMemories[0].title}...`
+                      : "Type your message..."
+                  }
                 />
               </div>
               <ContextUsageIndicator
