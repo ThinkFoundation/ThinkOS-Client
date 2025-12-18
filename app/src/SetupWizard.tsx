@@ -34,8 +34,8 @@ function WizardLayout({ title, children }: { title?: string; children: React.Rea
     <div className="relative flex items-center justify-center min-h-screen p-4">
       {/* Animated gradient background orbs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -left-40 w-80 h-80 rounded-full blur-3xl animate-pulse" style={{ backgroundColor: 'hsl(192 61% 59% / 0.2)' }} />
-        <div className="absolute -bottom-40 -right-40 w-80 h-80 rounded-full blur-3xl animate-pulse" style={{ backgroundColor: 'hsl(192 61% 59% / 0.15)', animationDelay: '1s' }} />
+        <div className="absolute -top-40 -left-40 w-80 h-80 rounded-full blur-3xl animate-pulse bg-orb-primary" />
+        <div className="absolute -bottom-40 -right-40 w-80 h-80 rounded-full blur-3xl animate-pulse bg-orb-secondary" style={{ animationDelay: '1s' }} />
       </div>
 
       <div className="relative w-full max-w-[400px] space-y-8">

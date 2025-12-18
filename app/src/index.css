@@ -193,4 +193,13 @@
   .chat-prose blockquote {
     @apply border-l-2 border-primary/50 pl-3 italic my-2;
   }
+
+  /* Animated background orbs for login/setup screens */
+  .bg-orb-primary {
+    background-color: hsl(192 61% 59% / 0.2);
+  }
+
+  .bg-orb-secondary {
+    background-color: hsl(192 61% 59% / 0.15);
+  }
 }
