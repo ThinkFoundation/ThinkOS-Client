@@ -350,6 +350,34 @@ def migration_014(conn: Connection) -> None:
         conn.execute(text("ALTER TABLE memories ADD COLUMN processing_attempts INTEGER DEFAULT 0"))
 
 
+@migration(15, "Handle FTS5 unavailability gracefully")
+def migration_015(conn: Connection) -> None:
+    """Drop FTS5 triggers if FTS5 module is no longer available."""
+    # Check if FTS5 triggers exist
+    triggers = conn.execute(text(
+        "SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'memories_fts%'"
+    )).fetchall()
+
+    if not triggers:
+        return  # No FTS triggers, nothing to do
+
+    # Test if FTS5 is available
+    try:
+        conn.execute(text("CREATE VIRTUAL TABLE _fts5_test USING fts5(test)"))
+        conn.execute(text("DROP TABLE _fts5_test"))
+        return  # FTS5 works, keep triggers
+    except Exception:
+        pass  # FTS5 not available
+
+    # Drop triggers that reference FTS5
+    print("FTS5 unavailable - removing FTS5 triggers for graceful fallback", flush=True)
+    for trigger in ['memories_fts_ai', 'memories_fts_ad', 'memories_fts_au']:
+        conn.execute(text(f"DROP TRIGGER IF EXISTS {trigger}"))
+
+    # Drop the FTS table
+    conn.execute(text("DROP TABLE IF EXISTS memories_fts"))
+
+
 # --- Migration runner ---
 
 def run_migrations(conn: Connection) -> list[tuple[int, str]]:

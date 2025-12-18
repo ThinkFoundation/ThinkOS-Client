@@ -3,8 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MemoryCard } from "@/components/MemoryCard";
-import { AddMemoryDialog } from "@/components/AddMemoryDialog";
 import { MemoryDetailPanel } from "@/components/MemoryDetailPanel";
+import { NoteEditor } from "@/components/editor";
 import { Plus, Search, Loader2, ChevronDown } from "lucide-react";
 import { useMemoryEvents } from "../hooks/useMemoryEvents";
 import { apiFetch } from "@/lib/api";
@@ -23,6 +23,10 @@ interface Memory {
   summary: string | null;
   tags: MemoryTag[];
   created_at: string;
+}
+
+interface MemoryWithContent extends Memory {
+  content?: string;
 }
 
 interface Tag {
@@ -54,17 +58,16 @@ export default function MemoriesPage() {
   const [searchResults, setSearchResults] = useState<Memory[] | null>(null);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Add dialog state
-  const [showAddForm, setShowAddForm] = useState(
-    searchParams.get("add") === "true"
-  );
-
-  // Tags state (for autocomplete in dialog)
+  // Tags state (for autocomplete)
   const [allTags, setAllTags] = useState<Tag[]>([]);
 
   // Detail panel state
   const [selectedMemoryId, setSelectedMemoryId] = useState<number | null>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
+
+  // Note editor state
+  const [showNoteEditor, setShowNoteEditor] = useState(false);
+  const [editingMemory, setEditingMemory] = useState<MemoryWithContent | null>(null);
 
   // Refs for infinite scroll
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -84,7 +87,11 @@ export default function MemoriesPage() {
         const memoryDate = new Date(memory.created_at);
         const now = new Date();
         if (dateFilter === "today") {
-          const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const startOfDay = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate()
+          );
           if (memoryDate < startOfDay) return false;
         } else if (dateFilter === "week") {
           const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -114,9 +121,7 @@ export default function MemoriesPage() {
     },
     onMemoryUpdated: (memoryId, data) => {
       const memory = data as Memory;
-      setMemories((prev) =>
-        prev.map((m) => (m.id === memoryId ? memory : m))
-      );
+      setMemories((prev) => prev.map((m) => (m.id === memoryId ? memory : m)));
     },
     onMemoryDeleted: (memoryId) => {
       setMemories((prev) => prev.filter((m) => m.id !== memoryId));
@@ -201,7 +206,7 @@ export default function MemoriesPage() {
   // Handle search params for add form
   useEffect(() => {
     if (searchParams.get("add") === "true") {
-      setShowAddForm(true);
+      openNoteEditor();
       setSearchParams({});
     }
   }, [searchParams, setSearchParams]);
@@ -258,10 +263,9 @@ export default function MemoriesPage() {
   // Remove tag from memory
   const handleRemoveTag = async (memoryId: number, tagId: number) => {
     try {
-      const res = await apiFetch(
-        `/api/memories/${memoryId}/tags/${tagId}`,
-        { method: "DELETE" }
-      );
+      const res = await apiFetch(`/api/memories/${memoryId}/tags/${tagId}`, {
+        method: "DELETE",
+      });
       if (res.ok) {
         setMemories((prev) =>
           prev.map((m) =>
@@ -298,8 +302,45 @@ export default function MemoriesPage() {
   // Update memory in list when edited in panel
   const handleMemoryUpdated = (updatedMemory: Memory) => {
     setMemories((prev) =>
-      prev.map((m) => (m.id === updatedMemory.id ? { ...m, ...updatedMemory } : m))
+      prev.map((m) =>
+        m.id === updatedMemory.id ? { ...m, ...updatedMemory } : m
+      )
     );
+  };
+
+  // Open note editor for new or existing memory
+  const openNoteEditor = async (memory?: Memory) => {
+    if (memory) {
+      // Fetch full memory details including content
+      try {
+        const res = await apiFetch(`/api/memories/${memory.id}`);
+        if (res.ok) {
+          const fullMemory = await res.json();
+          setEditingMemory({
+            ...memory,
+            content: fullMemory.content || "",
+          });
+        } else {
+          setEditingMemory(memory);
+        }
+      } catch {
+        setEditingMemory(memory);
+      }
+    } else {
+      setEditingMemory(null);
+    }
+    setShowNoteEditor(true);
+  };
+
+  // Handle note editor save
+  const handleEditorSave = (saved: {
+    id: number;
+    title: string;
+    content: string;
+  }) => {
+    // Refresh memories list to get updated data
+    fetchMemories(true);
+    fetchTags();
   };
 
   // Perform semantic search
@@ -370,19 +411,11 @@ export default function MemoriesPage() {
           <h1 className="text-2xl font-semibold">Memories</h1>
           <p className="text-sm text-muted-foreground">{total} total</p>
         </div>
-        <Button onClick={() => setShowAddForm(true)}>
+        <Button onClick={() => openNoteEditor()}>
           <Plus className="h-4 w-4 mr-2" />
-          Add Memory
+          Add Note
         </Button>
       </div>
-
-      {/* Add Memory Dialog */}
-      <AddMemoryDialog
-        open={showAddForm}
-        onOpenChange={setShowAddForm}
-        onSuccess={handleAddSuccess}
-        allTags={allTags}
-      />
 
       {/* Memory Detail Panel */}
       <MemoryDetailPanel
@@ -393,6 +426,26 @@ export default function MemoriesPage() {
         onMemoryUpdated={handleMemoryUpdated}
         allTags={allTags}
         formatDate={formatDate}
+        onOpenEditor={(memory) => {
+          closePanel();
+          openNoteEditor(memory);
+        }}
+      />
+
+      {/* Note Editor */}
+      <NoteEditor
+        memoryId={editingMemory?.id ?? null}
+        isOpen={showNoteEditor}
+        onOpenChange={setShowNoteEditor}
+        onSave={handleEditorSave}
+        initialData={
+          editingMemory
+            ? {
+                title: editingMemory.title,
+                content: editingMemory.content || "",
+              }
+            : undefined
+        }
       />
 
       {/* Filters */}
