@@ -54,6 +54,7 @@ interface MemoryDetailPanelProps {
   onMemoryUpdated: (memory: Memory) => void;
   allTags: Tag[];
   formatDate: (date: string) => string;
+  onOpenEditor?: (memory: Memory) => void;
 }
 
 export function MemoryDetailPanel({
@@ -64,6 +65,7 @@ export function MemoryDetailPanel({
   onMemoryUpdated,
   allTags,
   formatDate,
+  onOpenEditor,
 }: MemoryDetailPanelProps) {
   const [memory, setMemory] = useState<Memory | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -385,7 +387,15 @@ export function MemoryDetailPanel({
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => setIsEditing(true)}
+                      onClick={() => {
+                        if (memory.type === "note" && onOpenEditor) {
+                          // For notes, open full editor directly
+                          onOpenEditor(memory);
+                        } else {
+                          // For web memories, use inline title edit
+                          setIsEditing(true);
+                        }
+                      }}
                       className="h-6 w-6 ml-auto"
                     >
                       <Pencil className="h-3.5 w-3.5" />
@@ -395,6 +405,7 @@ export function MemoryDetailPanel({
 
                 {isEditing ? (
                   <>
+                    {/* Title edit - for web memories only (notes use full editor) */}
                     <Input
                       ref={titleInputRef}
                       value={editedTitle}
@@ -402,22 +413,7 @@ export function MemoryDetailPanel({
                       className="text-lg font-semibold"
                       placeholder="Title"
                     />
-                    {/* Content textarea - grouped with title in edit mode */}
-                    <div className="space-y-2 mt-3">
-                      <label className="text-sm font-medium">Content</label>
-                      <textarea
-                        className={cn(
-                          "w-full min-h-[120px] px-3 py-2 text-sm rounded-lg",
-                          "border border-input bg-background",
-                          "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
-                          "resize-none"
-                        )}
-                        value={editedContent}
-                        onChange={(e) => setEditedContent(e.target.value)}
-                        placeholder="Content"
-                      />
-                    </div>
-                    {/* Save/Cancel buttons - right below content */}
+                    {/* Save/Cancel buttons */}
                     <div className="flex gap-2 mt-3">
                       <Button
                         onClick={handleSave}
@@ -442,7 +438,6 @@ export function MemoryDetailPanel({
                         onClick={() => {
                           setIsEditing(false);
                           setEditedTitle(memory.title || "");
-                          setEditedContent(memory.content || "");
                         }}
                       >
                         Cancel

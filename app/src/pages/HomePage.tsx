@@ -38,10 +38,7 @@ export default function HomePage({ userName }: HomePageProps) {
   const [recentMemories, setRecentMemories] = useState<Memory[]>([]);
   const navigate = useNavigate();
 
-  const {
-    selectConversation,
-    setPendingMessage,
-  } = useConversation();
+  const { selectConversation, setPendingMessage } = useConversation();
 
   const { conversations } = useConversations();
 
@@ -120,9 +117,7 @@ export default function HomePage({ userName }: HomePageProps) {
             </CardHeader>
             <CardContent>
               {recentMemories.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No memories yet
-                </p>
+                <p className="text-sm text-muted-foreground">No memories yet</p>
               ) : (
                 <ul className="space-y-1">
                   {recentMemories.map((memory) => (
@@ -155,9 +150,7 @@ export default function HomePage({ userName }: HomePageProps) {
             </CardHeader>
             <CardContent>
               {recentChats.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No chats yet
-                </p>
+                <p className="text-sm text-muted-foreground">No chats yet</p>
               ) : (
                 <ul className="space-y-2">
                   {recentChats.map((chat) => (
@@ -191,7 +184,7 @@ export default function HomePage({ userName }: HomePageProps) {
               </p>
               <Link to="/memories?add=true">
                 <Button variant="outline" size="sm" className="w-full">
-                  Add Memory
+                  Add Note
                 </Button>
               </Link>
             </CardContent>
