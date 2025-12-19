@@ -16,8 +16,8 @@ function downloadFile(url, destPath, onProgress) {
 
     const makeRequest = (urlString) => {
       https.get(urlString, (response) => {
-        // Handle redirects
-        if (response.statusCode === 301 || response.statusCode === 302) {
+        // Handle redirects (301, 302, 307, 308)
+        if ([301, 302, 307, 308].includes(response.statusCode)) {
           makeRequest(response.headers.location);
           return;
         }
