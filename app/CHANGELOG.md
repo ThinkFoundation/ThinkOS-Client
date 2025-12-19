@@ -1,5 +1,30 @@
 # think-app
 
+## 0.5.1
+
+### Patch Changes
+
+- 159b7c3: Add lock app functionality to settings page
+- 5dec15b: Improve "Add to Chat" to attach memory as context instead of prepopulating message
+
+  - Add AttachedMemoryChips component showing selected memory as removable chip
+  - Navigate to /chat instead of / when clicking "Add to Chat"
+  - Send attached_memory_ids to backend for explicit context inclusion
+  - Label attached memory as "User's Selected Memory" so AI knows which memory user is referring to
+  - Preserve attached sources when special handlers run
+
+- bb80b08: Add auto-expanding chat input that grows as users type
+- 90f0ec7: Add max width constraint to chat bubbles for consistent column layout
+- d0a0da6: Fix HTTP 307 redirect handling in Ollama download for Windows users
+- 99257a9: Replace add memory dialog with full-screen TipTap editor
+
+  - Add new TipTap-based NoteEditor component with formatting toolbar
+  - Remove AddMemoryDialog in favor of full-screen editing experience
+  - Update MemoryDetailPanel to open editor for notes
+
+- 148eb6e: Replace WorkSans font with Inter for better readability
+- 98c0214: Add title bar with conversation actions (pin, delete) and improve sidebar icon UX
+
 ## 0.5.0
 
 ### Minor Changes
