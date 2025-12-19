@@ -10,6 +10,7 @@ import SettingsPage from "./pages/SettingsPage";
 import { NamePromptDialog } from "./components/NamePromptDialog";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
+import { toast } from "sonner";
 import { useSystemTheme } from "@/hooks/useSystemTheme";
 import { initializeApiToken, apiFetch } from "@/lib/api";
 
@@ -182,6 +183,26 @@ function App() {
       checkNamePrompt();
     }
   }, [appState]);
+
+  // Listen for app updates
+  useEffect(() => {
+    if (window.electronAPI?.onUpdateDownloaded) {
+      window.electronAPI.onUpdateDownloaded((version: string) => {
+        toast("Update Ready", {
+          description: `Version ${version} is ready to install.`,
+          action: {
+            label: "Restart",
+            onClick: () => window.electronAPI?.installUpdate(),
+          },
+          duration: Infinity,
+        });
+      });
+
+      return () => {
+        window.electronAPI?.removeUpdateListeners();
+      };
+    }
+  }, []);
 
   if (appState === "waiting_for_backend") {
     return (
