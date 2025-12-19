@@ -68,7 +68,7 @@
   position: fixed !important;
   top: 0 !important;
   right: 0 !important;
-  width: 350px !important;
+  /* width is now set via inline style for resizing */
   height: 100vh !important;
   z-index: 2147483647 !important;
   box-shadow: -4px 0 12px rgba(0, 0, 0, 0.15);
@@ -83,6 +83,33 @@
 
 #think-sidebar-wrapper.hidden {
   display: none !important;
+}
+
+/* Resize handle */
+.resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+  background: transparent;
+  z-index: 10;
+  transition: background-color 0.2s ease;
+}
+
+.resize-handle:hover {
+  background: hsl(var(--primary) / 0.3);
+}
+
+.resize-handle:active {
+  background: hsl(var(--primary) / 0.5);
+}
+
+/* Prevent text selection during drag */
+#think-sidebar-wrapper.is-dragging,
+#think-sidebar-wrapper.is-dragging * {
+  user-select: none !important;
 }
 
 /* Hide scrollbar but keep scroll functionality */

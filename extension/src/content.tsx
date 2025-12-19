@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { ChatSidebar } from './sidebar/ChatSidebar';
 // Import CSS as string for Shadow DOM injection
@@ -6,7 +6,47 @@ import contentStyles from './content.css?inline';
 
 // Global state for sidebar visibility
 let sidebarVisible = false;
-let toggleCallback: ((visible: boolean) => void) | null = null;
+let toggleCallback: ((visible: boolean, width: number) => void) | null = null;
+
+// Width constants
+const DEFAULT_WIDTH = 350;
+const MIN_WIDTH = 300;
+const MAX_WIDTH = 600;
+const STORAGE_KEY = 'thinkSidebarWidth';
+
+// Storage helpers
+async function loadWidthFromStorage(): Promise<number> {
+  return new Promise((resolve) => {
+    chrome.storage.local.get([STORAGE_KEY], (result) => {
+      const savedWidth = result[STORAGE_KEY];
+      if (typeof savedWidth === 'number' && savedWidth >= MIN_WIDTH && savedWidth <= MAX_WIDTH) {
+        resolve(savedWidth);
+      } else {
+        resolve(DEFAULT_WIDTH);
+      }
+    });
+  });
+}
+
+function saveWidthToStorage(width: number): void {
+  chrome.storage.local.set({ [STORAGE_KEY]: width });
+}
+
+// Page margin functions (push content aside)
+function setPageMargin(width: number) {
+  const html = document.documentElement;
+  html.style.marginRight = `${width}px`;
+  html.style.transition = 'margin-right 0.3s ease';
+}
+
+function clearPageMargin() {
+  const html = document.documentElement;
+  html.style.transition = 'margin-right 0.3s ease';
+  html.style.marginRight = '';
+  setTimeout(() => {
+    html.style.transition = '';
+  }, 300);
+}
 
 // Set up message listener IMMEDIATELY (outside React)
 chrome.runtime.onMessage.addListener(
@@ -14,13 +54,16 @@ chrome.runtime.onMessage.addListener(
     if (message.action === 'openSidebar' || message.action === 'toggleSidebar') {
       sidebarVisible = message.action === 'openSidebar' ? true : !sidebarVisible;
       if (toggleCallback) {
-        toggleCallback(sidebarVisible);
+        // Load width and pass to callback
+        loadWidthFromStorage().then((width) => {
+          toggleCallback?.(sidebarVisible, width);
+        });
       }
       sendResponse({ success: true });
     } else if (message.action === 'closeSidebar') {
       sidebarVisible = false;
       if (toggleCallback) {
-        toggleCallback(false);
+        toggleCallback(false, DEFAULT_WIDTH);
       }
       sendResponse({ success: true });
     }
@@ -37,22 +80,39 @@ const getInitialDarkMode = () => window.matchMedia('(prefers-color-scheme: dark)
 function SidebarApp() {
   const [isOpen, setIsOpen] = useState(sidebarVisible);
   const [isDark, setIsDark] = useState(getInitialDarkMode);
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_WIDTH);
+  const [isDragging, setIsDragging] = useState(false);
+  const sidebarWidthRef = useRef(sidebarWidth);
   const [pageData, setPageData] = useState({
     content: '',
     url: window.location.href,
     title: document.title,
   });
 
+  // Load saved width on mount
+  useEffect(() => {
+    loadWidthFromStorage().then(setSidebarWidth);
+  }, []);
+
+  // Keep ref in sync with state for use in event handlers
+  useEffect(() => {
+    sidebarWidthRef.current = sidebarWidth;
+  }, [sidebarWidth]);
+
   useEffect(() => {
     // Register toggle callback
-    toggleCallback = (visible: boolean) => {
+    toggleCallback = (visible: boolean, width: number) => {
       setIsOpen(visible);
       if (visible) {
+        setSidebarWidth(width);
+        setPageMargin(width);
         setPageData({
           content: document.body.innerText,
           url: window.location.href,
           title: document.title,
         });
+      } else {
+        clearPageMargin();
       }
     };
 
@@ -75,7 +135,39 @@ function SidebarApp() {
     };
   }, []);
 
+  // Drag resize logic
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, window.innerWidth - e.clientX));
+      setSidebarWidth(newWidth);
+      if (isOpen) {
+        setPageMargin(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      saveWidthToStorage(sidebarWidthRef.current);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, isOpen]);
+
   const handleClose = () => {
+    clearPageMargin();
     sidebarVisible = false;
     setIsOpen(false);
   };
@@ -83,8 +175,10 @@ function SidebarApp() {
   return (
     <div
       id="think-sidebar-wrapper"
-      className={`${isDark ? 'dark' : ''} ${isOpen ? '' : 'hidden'} bg-background text-foreground flex flex-col`}
+      className={`${isDark ? 'dark' : ''} ${isOpen ? '' : 'hidden'} ${isDragging ? 'is-dragging' : ''} bg-background text-foreground flex flex-col`}
+      style={{ width: `${sidebarWidth}px` }}
     >
+      <div className="resize-handle" onMouseDown={handleMouseDown} />
       {isOpen && (
         <ChatSidebar
           pageContent={pageData.content}
