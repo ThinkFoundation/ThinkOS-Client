@@ -9,7 +9,7 @@ export default {
     extend: {
       fontFamily: {
         sans: [
-          'Work Sans',
+          'Inter',
           '-apple-system',
           'BlinkMacSystemFont',
           'sans-serif'
