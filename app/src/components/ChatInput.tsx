@@ -20,7 +20,7 @@ export function ChatInput({
   placeholder = "Type your message...",
   className,
 }: ChatInputProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -28,6 +28,20 @@ export function ChatInput({
       onSubmit();
     }
   };
+
+  // Auto-resize textarea based on content
+  const adjustHeight = () => {
+    const textarea = inputRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+    }
+  };
+
+  // Adjust height when value changes
+  useEffect(() => {
+    adjustHeight();
+  }, [value]);
 
   // Auto-focus input after message submission (when loading completes)
   useEffect(() => {
@@ -39,7 +53,7 @@ export function ChatInput({
   return (
     <div
       className={cn(
-        "relative flex items-center gap-2 p-2 rounded-full",
+        "relative flex items-end gap-2 p-2 rounded-2xl",
         // Glassmorphism
         "bg-white/70 dark:bg-white/5 backdrop-blur-xl",
         "border border-white/60 dark:border-white/10",
@@ -48,16 +62,16 @@ export function ChatInput({
         className
       )}
     >
-      <input
+      <textarea
         ref={inputRef}
-        type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={isLoading}
+        rows={1}
         className={cn(
-          "flex-1 bg-transparent px-4 py-2 text-base",
+          "flex-1 bg-transparent px-4 py-2 text-base min-h-[44px] max-h-[200px] resize-none",
           "placeholder:text-muted-foreground/60",
           "focus:outline-none",
           "disabled:opacity-50"
