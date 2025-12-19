@@ -36,6 +36,7 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
 
   const handleDelete = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
+    if (!confirm("Are you sure you want to delete this conversation?")) return;
     const success = await deleteConversation(id);
     if (success && currentConversationId === id) {
       onNewChat();
@@ -47,50 +48,61 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
     await togglePinConversation(conversation.id, !conversation.pinned);
   };
 
-  const renderConversationItem = (conversation: Conversation) => (
-    <div
-      key={conversation.id}
-      onClick={() => selectConversation(conversation)}
-      className={cn(
-        "group flex items-center gap-2 px-2 py-2 rounded-md text-sm cursor-pointer transition-colors",
-        currentConversationId === conversation.id
-          ? "bg-primary/10 text-foreground"
-          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-      )}
-    >
-      <MessageSquare className="h-4 w-4 shrink-0" />
-      <span className="flex-1 truncate text-xs">
-        {conversation.title || "New conversation"}
-      </span>
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
-          onClick={(e) => handleTogglePin(e, conversation)}
-          title={conversation.pinned ? "Unpin conversation" : "Pin conversation"}
+  const renderConversationItem = (conversation: Conversation) => {
+    const isSelected = currentConversationId === conversation.id;
+    return (
+      <div
+        key={conversation.id}
+        onClick={() => selectConversation(conversation)}
+        className={cn(
+          "group relative flex items-center gap-2 px-2 py-2 rounded-md text-sm cursor-pointer transition-colors",
+          isSelected
+            ? "bg-primary/10 text-foreground"
+            : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+        )}
+      >
+        <MessageSquare className="h-4 w-4 shrink-0" />
+        <span className="flex-1 truncate text-xs">
+          {conversation.title || "New conversation"}
+        </span>
+        {/* Absolutely positioned icons with gradient fade */}
+        <div
+          className={cn(
+            "absolute right-1 top-1/2 -translate-y-1/2",
+            "flex items-center gap-0.5 pl-6 rounded-r-md",
+            "opacity-0 group-hover:opacity-100 transition-opacity",
+            "bg-gradient-to-r from-transparent via-[hsl(var(--muted))] to-[hsl(var(--muted))]"
+          )}
         >
-          <Pin
-            className={cn(
-              "h-3 w-3",
-              conversation.pinned
-                ? "text-primary fill-primary"
-                : "text-muted-foreground"
-            )}
-          />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
-          onClick={(e) => handleDelete(e, conversation.id)}
-          title="Delete conversation"
-        >
-          <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-        </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={(e) => handleTogglePin(e, conversation)}
+            title={conversation.pinned ? "Unpin conversation" : "Pin conversation"}
+          >
+            <Pin
+              className={cn(
+                "h-3 w-3",
+                conversation.pinned
+                  ? "text-primary fill-primary"
+                  : "text-muted-foreground"
+              )}
+            />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={(e) => handleDelete(e, conversation.id)}
+            title="Delete conversation"
+          >
+            <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+          </Button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderGroup = (groupKey: TimeGroup, groupConversations: Conversation[]) => {
     if (groupConversations.length === 0) return null;
