@@ -208,12 +208,24 @@ OPENAI_EMBEDDING_MODELS = [
 OLLAMA_EMBEDDING_MODELS = [
     "mxbai-embed-large",
     "snowflake-arctic-embed",
+    "all-minilm",
 ]
 
 # Models that should never be shown (known to be broken or impractical)
 # nomic-embed-text crashes with EOF on content >5000 chars
 # all-minilm has 256 token context - too small for real documents
 BLOCKED_EMBEDDING_MODELS = ["nomic-embed-text", "all-minilm"]
+
+# Popular Ollama chat models to suggest for download
+OLLAMA_CHAT_MODELS = [
+    "llama3.2",
+    "llama3.1",
+    "mistral",
+    "phi3",
+    "gemma2",
+    "qwen2.5",
+    "deepseek-coder",
+]
 
 
 @router.get("/settings/models")
@@ -245,6 +257,17 @@ async def get_available_models(provider: str | None = None) -> ModelsResponse:
                         ))
         except Exception as e:
             print(f"Error fetching Ollama models: {e}")
+
+        # Add suggested chat models that aren't downloaded yet
+        downloaded_base_names = {m.name.split(":")[0] for m in models}
+        for model_name in OLLAMA_CHAT_MODELS:
+            if model_name not in downloaded_base_names:
+                models.append(ModelInfo(
+                    name=model_name,
+                    size=None,
+                    is_downloaded=False,
+                    context_window=get_context_window(model_name),
+                ))
 
         return ModelsResponse(
             models=models,
