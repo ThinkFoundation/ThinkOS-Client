@@ -135,11 +135,14 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
         run: pnpm build:all:release
 
-      - name: Upload DMG artifact
+      - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: electron-app-macos
-          path: app/release/*.dmg
+          path: |
+            app/release/*.dmg
+            app/release/*.zip
+            app/release/latest-mac.yml
           retention-days: 1
 
   build-windows:
@@ -216,11 +219,13 @@ jobs:
       - name: Build Electron app (NSIS installer)
         run: pnpm --filter think-app electron:build
 
-      - name: Upload Windows artifact
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: electron-app-windows
-          path: app/release/*.exe
+          path: |
+            app/release/*.exe
+            app/release/latest.yml
           retention-days: 1
 
   upload-release:
@@ -244,7 +249,10 @@ jobs:
           files: |
             artifacts/chrome-extension/*.zip
             artifacts/electron-app-macos/*.dmg
+            artifacts/electron-app-macos/*.zip
+            artifacts/electron-app-macos/latest-mac.yml
             artifacts/electron-app-windows/*.exe
+            artifacts/electron-app-windows/latest.yml
           draft: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

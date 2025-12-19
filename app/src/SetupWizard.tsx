@@ -25,6 +25,10 @@ declare global {
       removeBackendListeners: () => void;
       // App token for API authentication
       getAppToken: () => string | null;
+      // Auto-update handlers
+      onUpdateDownloaded: (callback: (version: string) => void) => void;
+      removeUpdateListeners: () => void;
+      installUpdate: () => Promise<void>;
     };
   }
 }

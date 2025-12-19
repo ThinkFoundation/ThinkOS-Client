@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const { spawn, execSync } = require('child_process');
 const crypto = require('crypto');
 const path = require('path');
@@ -70,6 +71,25 @@ const APP_TOKEN = crypto.randomBytes(32).toString('hex');
 const HEALTH_CHECK_URL = 'http://localhost:8765/health';
 const HEALTH_CHECK_INTERVAL_MS = 200;
 const HEALTH_CHECK_TIMEOUT_MS = 30000;
+
+// Configure auto-updater
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
+
+autoUpdater.on('update-available', (info) => {
+  console.log('Update available:', info.version);
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  console.log('Update downloaded:', info.version);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-downloaded', info.version);
+  }
+});
+
+autoUpdater.on('error', (err) => {
+  console.error('Auto-updater error:', err);
+});
 
 /**
  * Polls the backend health endpoint until it responds successfully.
@@ -191,6 +211,80 @@ function startPythonBackend() {
   });
 }
 
+function createMenu() {
+  const isMac = process.platform === 'darwin';
+
+  const template = [
+    ...(isMac ? [{
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        {
+          label: 'Check for Updates...',
+          click: () => autoUpdater.checkForUpdates()
+        },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    }] : []),
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        ...(isMac ? [
+          { type: 'separator' },
+          { role: 'front' }
+        ] : [
+          { role: 'close' }
+        ])
+      ]
+    },
+    ...(!isMac ? [{
+      label: 'Help',
+      submenu: [{
+        label: 'Check for Updates...',
+        click: () => autoUpdater.checkForUpdates()
+      }]
+    }] : [])
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -236,6 +330,14 @@ app.whenReady().then(async () => {
   const resourcesPath = app.isPackaged ? process.resourcesPath : path.join(__dirname, '../..');
   const isDev = !app.isPackaged;
   installNativeHost(resourcesPath, undefined, isDev);
+
+  // Set up application menu
+  createMenu();
+
+  // Check for updates (only in production)
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdatesAndNotify();
+  }
 
   // Start Ollama if installed (don't wait, let it start in background)
   ensureOllamaRunning();
@@ -436,4 +538,8 @@ ipcMain.handle('pull-model', async (_event, modelName) => {
     console.error('Model pull error:', error);
     return { success: false, error: error.message };
   }
+});
+
+ipcMain.handle('install-update', () => {
+  autoUpdater.quitAndInstall();
 });
