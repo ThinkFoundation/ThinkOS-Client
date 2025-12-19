@@ -8,8 +8,8 @@
     "build": "tsc && vite build",
     "electron": "electron .",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "electron-builder",
-    "electron:build:release": "NOTARIZE=1 electron-builder"
+    "electron:build": "electron-builder --publish never",
+    "electron:build:release": "NOTARIZE=1 electron-builder --publish never"
   },
   "build": {
     "appId": "com.think.app",
