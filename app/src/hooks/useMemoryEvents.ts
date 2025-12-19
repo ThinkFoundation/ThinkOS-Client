@@ -44,6 +44,29 @@ export function useMemoryEvents({
   const abortControllerRef = useRef<AbortController | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
 
+  // Store callbacks in refs so they can update without causing SSE reconnection
+  // This is a standard React pattern for event handlers
+  const onMemoryCreatedRef = useRef(onMemoryCreated);
+  const onMemoryUpdatedRef = useRef(onMemoryUpdated);
+  const onMemoryDeletedRef = useRef(onMemoryDeleted);
+  const onConversationCreatedRef = useRef(onConversationCreated);
+  const onConversationUpdatedRef = useRef(onConversationUpdated);
+  const onConversationDeletedRef = useRef(onConversationDeleted);
+  const onConnectedRef = useRef(onConnected);
+  const onErrorRef = useRef(onError);
+
+  // Keep refs in sync with latest callbacks
+  useEffect(() => {
+    onMemoryCreatedRef.current = onMemoryCreated;
+    onMemoryUpdatedRef.current = onMemoryUpdated;
+    onMemoryDeletedRef.current = onMemoryDeleted;
+    onConversationCreatedRef.current = onConversationCreated;
+    onConversationUpdatedRef.current = onConversationUpdated;
+    onConversationDeletedRef.current = onConversationDeleted;
+    onConnectedRef.current = onConnected;
+    onErrorRef.current = onError;
+  });
+
   const connect = useCallback(() => {
     if (!enabled) return;
 
@@ -71,36 +94,36 @@ export function useMemoryEvents({
 
           switch (data.type) {
             case "connected":
-              onConnected?.();
+              onConnectedRef.current?.();
               break;
             case "memory_created":
               if (data.memory_id !== undefined) {
-                onMemoryCreated?.(data.memory_id, data.data);
+                onMemoryCreatedRef.current?.(data.memory_id, data.data);
               }
               break;
             case "memory_updated":
               if (data.memory_id !== undefined) {
-                onMemoryUpdated?.(data.memory_id, data.data);
+                onMemoryUpdatedRef.current?.(data.memory_id, data.data);
               }
               break;
             case "memory_deleted":
               if (data.memory_id !== undefined) {
-                onMemoryDeleted?.(data.memory_id);
+                onMemoryDeletedRef.current?.(data.memory_id);
               }
               break;
             case "conversation_created":
               if (data.memory_id !== undefined) {
-                onConversationCreated?.(data.memory_id, data.data);
+                onConversationCreatedRef.current?.(data.memory_id, data.data);
               }
               break;
             case "conversation_updated":
               if (data.memory_id !== undefined) {
-                onConversationUpdated?.(data.memory_id, data.data);
+                onConversationUpdatedRef.current?.(data.memory_id, data.data);
               }
               break;
             case "conversation_deleted":
               if (data.memory_id !== undefined) {
-                onConversationDeleted?.(data.memory_id);
+                onConversationDeletedRef.current?.(data.memory_id);
               }
               break;
           }
@@ -109,7 +132,7 @@ export function useMemoryEvents({
         }
       },
       onerror(error) {
-        onError?.(error);
+        onErrorRef.current?.(error);
         // Reconnect after delay (fetchEventSource handles this automatically,
         // but we add a delay to prevent rapid reconnection attempts)
         reconnectTimeoutRef.current = window.setTimeout(() => {
@@ -120,17 +143,7 @@ export function useMemoryEvents({
       },
       openWhenHidden: true, // Keep connection open when tab is hidden
     });
-  }, [
-    enabled,
-    onMemoryCreated,
-    onMemoryUpdated,
-    onMemoryDeleted,
-    onConversationCreated,
-    onConversationUpdated,
-    onConversationDeleted,
-    onConnected,
-    onError,
-  ]);
+  }, [enabled]); // Only reconnect when enabled changes!
 
   useEffect(() => {
     connect();
