@@ -115,14 +115,14 @@ function init() {
   }
 
   // Get font URLs using chrome.runtime.getURL
-  const workSansUrl = chrome.runtime.getURL('fonts/WorkSans-VariableFont_wght.ttf');
+  const interUrl = chrome.runtime.getURL('fonts/InterVariable.ttf');
   const goudyUrl = chrome.runtime.getURL('fonts/GoudyBookletter1911-Regular.ttf');
 
   // Build @font-face CSS
   const fontFaceCSS =
     '@font-face {' +
-    "font-family: 'Work Sans';" +
-    "src: url('" + workSansUrl + "') format('truetype');" +
+    "font-family: 'Inter';" +
+    "src: url('" + interUrl + "') format('truetype');" +
     'font-weight: 100 900;' +
     'font-display: swap;' +
     '}' +
