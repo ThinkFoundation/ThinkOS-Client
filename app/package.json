@@ -1,6 +1,6 @@
 {
   "name": "think-app",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -37,7 +37,10 @@
     ],
     "mac": {
       "icon": "build/icon.icns",
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "category": "public.app-category.productivity",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,

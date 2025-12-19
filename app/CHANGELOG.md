@@ -1,5 +1,21 @@
 # think-app
 
+## 0.5.2
+
+### Patch Changes
+
+- 201e269: Add auto-updater for GitHub releases
+
+  - Integrate electron-updater with GitHub releases provider
+  - Add app menu with "Check for Updates..." option
+  - Show in-app toast notification when update is ready
+  - Add "Restart" action to apply downloaded updates
+
+- 27d602f: Fix conversation not appearing in sidebar when starting from home
+
+  - Use refs for event callbacks to prevent SSE reconnection
+  - Ensures conversation_created events are properly received
+
 ## 0.5.1
 
 ### Patch Changes
