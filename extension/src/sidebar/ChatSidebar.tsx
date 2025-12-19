@@ -87,7 +87,7 @@ export function ChatSidebar({ pageContent, pageUrl, pageTitle, onClose }: ChatSi
   // Follow-up suggestions from LLM
   const [followupSuggestions, setFollowupSuggestions] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -100,6 +100,19 @@ export function ChatSidebar({ pageContent, pageUrl, pageTitle, onClose }: ChatSi
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Auto-resize textarea based on content
+  const adjustHeight = () => {
+    const textarea = inputRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+    }
+  };
+
+  useEffect(() => {
+    adjustHeight();
+  }, [input]);
 
   const sendMessage = async (messageText?: string) => {
     const userMessage = (messageText || input).trim();
@@ -420,16 +433,16 @@ export function ChatSidebar({ pageContent, pageUrl, pageTitle, onClose }: ChatSi
 
       {/* Input */}
       <div className="p-3 border-t border-border">
-        <div className="relative flex items-center gap-2 p-2 rounded-full bg-white/70 dark:bg-white/5 backdrop-blur-xl border border-white/60 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/20">
-          <input
+        <div className="relative flex items-end gap-2 p-2 rounded-2xl bg-white/70 dark:bg-white/5 backdrop-blur-xl border border-white/60 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/20">
+          <textarea
             ref={inputRef}
-            type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask about this page..."
             disabled={loading}
-            className="flex-1 bg-transparent px-4 py-2 text-base placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-50"
+            rows={1}
+            className="flex-1 bg-transparent px-4 py-2 text-base min-h-[44px] max-h-[200px] resize-none placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-50"
           />
           <Button
             size="icon"
