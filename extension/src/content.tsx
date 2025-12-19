@@ -141,7 +141,17 @@ function init() {
     document.head.appendChild(fontStyleEl);
   }
 
-  const shadow = container.attachShadow({ mode: 'open' });
+  const shadow = container.attachShadow({ mode: 'open', delegatesFocus: true });
+
+  // Stop focus events from propagating to host document
+  shadow.addEventListener('focusin', (e) => e.stopPropagation());
+  shadow.addEventListener('focusout', (e) => e.stopPropagation());
+
+  // Stop keyboard events from being captured by host page (e.g., Claude.ai)
+  // Claude.ai uses global keyboard listeners that intercept keystrokes
+  shadow.addEventListener('keydown', (e) => e.stopPropagation());
+  shadow.addEventListener('keyup', (e) => e.stopPropagation());
+  shadow.addEventListener('keypress', (e) => e.stopPropagation());
 
   // Inject @font-face + Tailwind CSS into Shadow DOM
   // Fonts must be in Shadow DOM to work reliably across browsers
