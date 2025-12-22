@@ -12,9 +12,41 @@ import { useReembedJob } from "@/hooks/useReembedJob";
 
 interface Settings {
   ai_provider: string;
-  openai_api_key: string;
-  openai_base_url: string;
+  has_api_key: boolean;
+  // Per-provider models
+  ollama_model: string;
+  openrouter_model: string;
+  venice_model: string;
+  // Per-provider embedding models
+  ollama_embedding_model: string;
+  openrouter_embedding_model: string;
+  venice_embedding_model: string;
+  // Per-provider API key status
+  openrouter_has_api_key: boolean;
+  venice_has_api_key: boolean;
 }
+
+// Provider configurations
+const PROVIDERS = [
+  {
+    id: "ollama",
+    name: "Ollama (Local)",
+    description: "Free, private, runs on your machine",
+    showStatus: true,
+  },
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    description: "Access 500+ AI models",
+    showStatus: false,
+  },
+  {
+    id: "venice",
+    name: "Venice",
+    description: "Private, uncensored AI",
+    showStatus: false,
+  },
+] as const;
 
 interface OllamaStatus {
   installed: boolean;
@@ -33,8 +65,15 @@ interface SettingsPageProps {
 export default function SettingsPage({ onNameChange }: SettingsPageProps) {
   const [settings, setSettings] = useState<Settings>({
     ai_provider: "ollama",
-    openai_api_key: "",
-    openai_base_url: "",
+    has_api_key: false,
+    ollama_model: "",
+    openrouter_model: "",
+    venice_model: "",
+    ollama_embedding_model: "",
+    openrouter_embedding_model: "",
+    venice_embedding_model: "",
+    openrouter_has_api_key: false,
+    venice_has_api_key: false,
   });
   const [originalProvider, setOriginalProvider] = useState("ollama");
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus>({
@@ -42,7 +81,6 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
     running: false,
   });
   const [apiKey, setApiKey] = useState("");
-  const [baseUrl, setBaseUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -116,9 +154,22 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
       const res = await apiFetch("/api/settings");
       if (res.ok) {
         const data = await res.json();
-        setSettings(data);
+
+        // Fetch API key status for all cloud providers
+        const [openrouterRes, veniceRes] = await Promise.all([
+          apiFetch('/api/settings/has-api-key/openrouter'),
+          apiFetch('/api/settings/has-api-key/venice'),
+        ]);
+
+        const openrouterData = openrouterRes.ok ? await openrouterRes.json() : { has_api_key: false };
+        const veniceData = veniceRes.ok ? await veniceRes.json() : { has_api_key: false };
+
+        setSettings({
+          ...data,
+          openrouter_has_api_key: openrouterData.has_api_key,
+          venice_has_api_key: veniceData.has_api_key,
+        });
         setOriginalProvider(data.ai_provider);
-        setBaseUrl(data.openai_base_url || "");
         // Fetch embedding model after we know the actual provider
         await fetchEmbeddingModel(data.ai_provider);
       }
@@ -223,13 +274,13 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
     setSaving(true);
     setSaved(false);
     try {
-      const updates: { ai_provider?: string; openai_api_key?: string; openai_base_url?: string } = {
+      const updates: { ai_provider?: string; api_key?: string } = {
         ai_provider: settings.ai_provider,
-        openai_base_url: baseUrl,
       };
 
-      if (apiKey) {
-        updates.openai_api_key = apiKey;
+      // Only include API key if provided (for cloud providers)
+      if (apiKey && settings.ai_provider !== "ollama") {
+        updates.api_key = apiKey;
       }
 
       const res = await apiFetch("/api/settings", {
@@ -299,13 +350,32 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
   };
 
   const selectProvider = (provider: string) => {
-    setSettings({ ...settings, ai_provider: provider });
-    // Reset embedding model to new provider's default
-    if (provider === "ollama") {
-      setPendingEmbeddingModel("mxbai-embed-large");
-    } else {
-      setPendingEmbeddingModel("text-embedding-3-small");
+    // Use saved embedding model for this provider, or fall back to default
+    const savedEmbeddingModel = {
+      ollama: settings.ollama_embedding_model,
+      openrouter: settings.openrouter_embedding_model,
+      venice: settings.venice_embedding_model,
+    }[provider];
+
+    const defaultEmbeddings: Record<string, string> = {
+      ollama: "mxbai-embed-large",
+      openrouter: "openai/text-embedding-3-small",
+      venice: "", // Venice doesn't support embeddings
+    };
+
+    // Prefer saved model, fall back to default
+    setPendingEmbeddingModel(savedEmbeddingModel || defaultEmbeddings[provider] || "");
+
+    // Determine has_api_key based on provider
+    let hasApiKey = true; // Ollama doesn't need API key
+    if (provider === "openrouter") {
+      hasApiKey = settings.openrouter_has_api_key ?? false;
+    } else if (provider === "venice") {
+      hasApiKey = settings.venice_has_api_key ?? false;
     }
+
+    // Update all settings in a single call to avoid race conditions
+    setSettings({ ...settings, ai_provider: provider, has_api_key: hasApiKey });
   };
 
   const handleThemeChange = (newTheme: Theme) => {
@@ -410,76 +480,89 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <button
-                onClick={() => selectProvider("ollama")}
-                className={`w-full flex items-center justify-between p-3 rounded-md border transition-colors ${
-                  settings.ai_provider === "ollama"
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:bg-muted/50"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                      settings.ai_provider === "ollama"
-                        ? "border-primary"
-                        : "border-muted-foreground"
-                    }`}
-                  >
-                    {settings.ai_provider === "ollama" && (
-                      <div className="w-2 h-2 rounded-full bg-primary" />
+              {PROVIDERS.map((provider) => (
+                <button
+                  key={provider.id}
+                  onClick={() => selectProvider(provider.id)}
+                  className={`w-full flex items-center justify-between p-3 rounded-md border transition-colors ${
+                    settings.ai_provider === provider.id
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:bg-muted/50"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                        settings.ai_provider === provider.id
+                          ? "border-primary"
+                          : "border-muted-foreground"
+                      }`}
+                    >
+                      {settings.ai_provider === provider.id && (
+                        <div className="w-2 h-2 rounded-full bg-primary" />
+                      )}
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium">{provider.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {provider.description}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/* Active indicator for saved provider */}
+                    {provider.id === originalProvider && (
+                      <span className="text-xs text-primary/80 flex items-center gap-1 bg-primary/10 px-1.5 py-0.5 rounded">
+                        <Check className="h-3 w-3" />
+                        Active
+                      </span>
                     )}
-                  </div>
-                  <div className="text-left">
-                    <p className="font-medium">Ollama (Local)</p>
-                    <p className="text-sm text-muted-foreground">
-                      Free, private, runs on your machine
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {ollamaStatus.running ? (
-                    <span className="text-xs text-green-600 flex items-center gap-1">
-                      <Circle className="h-2 w-2 fill-green-600" />
-                      Running
-                    </span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Circle className="h-2 w-2" />
-                      Not running
-                    </span>
-                  )}
-                </div>
-              </button>
 
-              <button
-                onClick={() => selectProvider("openai")}
-                className={`w-full flex items-center justify-between p-3 rounded-md border transition-colors ${
-                  settings.ai_provider === "openai"
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:bg-muted/50"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                      settings.ai_provider === "openai"
-                        ? "border-primary"
-                        : "border-muted-foreground"
-                    }`}
-                  >
-                    {settings.ai_provider === "openai" && (
-                      <div className="w-2 h-2 rounded-full bg-primary" />
+                    {/* Ollama running status */}
+                    {provider.id === "ollama" && (
+                      ollamaStatus.running ? (
+                        <span className="text-xs text-green-600 flex items-center gap-1">
+                          <Circle className="h-2 w-2 fill-green-600" />
+                          Running
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Circle className="h-2 w-2" />
+                          Not running
+                        </span>
+                      )
+                    )}
+
+                    {/* Cloud provider API key status */}
+                    {provider.id === "openrouter" && (
+                      settings.openrouter_has_api_key ? (
+                        <span className="text-xs text-green-600 flex items-center gap-1">
+                          <Circle className="h-2 w-2 fill-green-600" />
+                          API key set
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Circle className="h-2 w-2" />
+                          No API key
+                        </span>
+                      )
+                    )}
+                    {provider.id === "venice" && (
+                      settings.venice_has_api_key ? (
+                        <span className="text-xs text-green-600 flex items-center gap-1">
+                          <Circle className="h-2 w-2 fill-green-600" />
+                          API key set
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Circle className="h-2 w-2" />
+                          No API key
+                        </span>
+                      )
                     )}
                   </div>
-                  <div className="text-left">
-                    <p className="font-medium">Cloud API</p>
-                    <p className="text-sm text-muted-foreground">
-                      OpenAI or compatible services
-                    </p>
-                  </div>
-                </div>
-              </button>
+                </button>
+              ))}
             </div>
 
             {/* Chat Model Selection */}
@@ -542,36 +625,26 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
               </div>
             )}
 
-            {settings.ai_provider === "openai" && (
-              <div className="pt-2 space-y-4">
-                <div>
-                  <label className="text-sm font-medium">API Base URL</label>
-                  <Input
-                    type="text"
-                    placeholder="https://api.openai.com/v1"
-                    value={baseUrl}
-                    onChange={(e) => setBaseUrl(e.target.value)}
-                    className="mt-1"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Leave empty for OpenAI, or enter a custom endpoint for compatible services
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">API Key</label>
-                  <Input
-                    type="password"
-                    placeholder={
-                      settings.openai_api_key ? "••• Key saved •••" : "Enter API key"
-                    }
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    className="mt-1"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    API key from your provider (OpenAI, Azure, etc.)
-                  </p>
-                </div>
+            {settings.ai_provider !== "ollama" && (
+              <div className="pt-2">
+                <label className="text-sm font-medium">API Key</label>
+                <Input
+                  type="password"
+                  placeholder={
+                    settings.has_api_key ? "••• Key saved •••" : "Enter API key"
+                  }
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  className="mt-1"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {settings.ai_provider === "openrouter" && (
+                    <>Get your key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">openrouter.ai</a></>
+                  )}
+                  {settings.ai_provider === "venice" && (
+                    <>Get your key at <a href="https://venice.ai/settings/api" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">venice.ai</a></>
+                  )}
+                </p>
               </div>
             )}
 
@@ -685,8 +758,8 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
         document.body
       )}
 
-      {/* Manual re-embed dialog */}
-      {showReembedDialog && createPortal(
+      {/* Manual re-embed dialog - reuses the same progress UI as provider warning */}
+      {showReembedDialog && !showProviderWarning && createPortal(
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
           <div className="bg-background border rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
             <div className="flex items-center justify-between mb-4">
@@ -695,7 +768,6 @@ export default function SettingsPage({ onNameChange }: SettingsPageProps) {
                 <Check className="h-5 w-5 text-green-500" />
               )}
             </div>
-
             <div className="space-y-3">
               <Progress value={progressPercent} className="h-2" />
               <div className="flex justify-between text-sm text-muted-foreground">

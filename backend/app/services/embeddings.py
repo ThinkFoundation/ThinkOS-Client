@@ -6,6 +6,7 @@ import numpy as np
 from openai import AsyncOpenAI
 
 from .. import config
+from ..models_info import get_provider_config
 from .secrets import get_api_key
 
 logger = logging.getLogger(__name__)
@@ -13,9 +14,26 @@ logger = logging.getLogger(__name__)
 
 def get_current_embedding_model() -> str:
     """Get the current embedding model identifier (provider:model)."""
-    if config.settings.embedding_provider == "openai":
-        return f"openai:{config.settings.openai_embedding_model}"
-    return f"ollama:{config.settings.ollama_embedding_model}"
+    provider = config.settings.embedding_provider
+    if provider == "ollama":
+        return f"ollama:{config.settings.ollama_embedding_model}"
+    elif provider == "openrouter":
+        return f"openrouter:{config.settings.openrouter_embedding_model}"
+    elif provider == "venice":
+        return f"venice:{config.settings.venice_embedding_model}"
+    return f"{provider}:"
+
+
+def get_embedding_model_name() -> str:
+    """Get just the model name (without provider prefix) for the current provider."""
+    provider = config.settings.embedding_provider
+    if provider == "ollama":
+        return config.settings.ollama_embedding_model
+    elif provider == "openrouter":
+        return config.settings.openrouter_embedding_model
+    elif provider == "venice":
+        return config.settings.venice_embedding_model
+    return ""
 
 
 # Context windows for embedding models (in tokens)
@@ -52,22 +70,23 @@ async def get_embedding(text: str) -> list[float]:
         raise ValueError("Cannot generate embedding for empty text")
 
     # Get context limit for current model
-    if config.settings.embedding_provider == "openai":
-        model = config.settings.openai_embedding_model
-    else:
-        model = config.settings.ollama_embedding_model
-
-    base_name = model.split(":")[0]
+    model = get_embedding_model_name()
+    base_name = model.split(":")[0] if ":" in model else model
+    # Also handle provider/model format (e.g., "openai/text-embedding-3-small")
+    if "/" in base_name:
+        base_name = base_name.split("/")[-1]
     context_tokens = EMBEDDING_MODEL_CONTEXT.get(base_name, DEFAULT_EMBEDDING_CONTEXT)
 
     # Truncate if needed (safety net - embedding_summary should fit)
     text = truncate_text(text, context_tokens)
 
-    # Get embedding
-    if config.settings.embedding_provider == "openai":
-        return await _get_openai_embedding(text)
-    else:
+    # Get embedding based on provider
+    provider = config.settings.embedding_provider
+    if provider == "ollama":
         return await _get_ollama_embedding(text)
+    else:
+        # Cloud provider (openrouter, venice)
+        return await _get_cloud_embedding(text, provider)
 
 
 async def _get_ollama_embedding(text: str, retries: int = 3) -> list[float]:
@@ -106,29 +125,47 @@ async def _get_ollama_embedding(text: str, retries: int = 3) -> list[float]:
     raise last_error  # type: ignore
 
 
-async def _get_openai_embedding(text: str, retries: int = 3) -> list[float]:
-    """Get embedding from OpenAI with retry logic matching Ollama."""
-    api_key = await get_api_key("openai") or config.settings.openai_api_key
+async def _get_cloud_embedding(text: str, provider: str, retries: int = 3) -> list[float]:
+    """Get embedding from a cloud provider with retry logic."""
+    api_key = await get_api_key(provider)
     if not api_key:
-        raise ValueError("OpenAI API key not configured")
+        raise ValueError(f"{provider} API key not configured")
+
+    provider_config = get_provider_config(provider)
+    if not provider_config:
+        raise ValueError(f"Unknown provider: {provider}")
+
+    model = get_embedding_model_name()
+    if not model:
+        raise ValueError(f"No embedding model configured for {provider}")
 
     last_error = None
     for attempt in range(retries):
         try:
-            if config.settings.openai_base_url:
-                client = AsyncOpenAI(
-                    base_url=config.settings.openai_base_url,
-                    api_key=api_key,
-                )
-            else:
-                client = AsyncOpenAI(api_key=api_key)
+            extra_headers = provider_config.get("extra_headers", {})
+            client = AsyncOpenAI(
+                base_url=provider_config["base_url"],
+                api_key=api_key,
+                default_headers=extra_headers if extra_headers else None,
+            )
             response = await client.embeddings.create(
-                model=config.settings.openai_embedding_model,
+                model=model,
                 input=text,
             )
             return response.data[0].embedding
         except Exception as e:
             last_error = e
+            # Log detailed error info
+            error_detail = str(e)
+            if hasattr(e, 'response'):
+                try:
+                    error_body = e.response.text if hasattr(e.response, 'text') else str(e.response.content)
+                    error_detail = f"status={e.response.status_code}, body={error_body[:500]}"
+                except Exception:
+                    pass
+            logger.error(
+                f"Cloud embedding error ({provider}, attempt {attempt+1}/{retries}): {error_detail}"
+            )
             if attempt < retries - 1:
                 await asyncio.sleep(1 * (attempt + 1))  # Exponential backoff
     raise last_error  # type: ignore

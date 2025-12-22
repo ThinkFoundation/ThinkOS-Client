@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ChevronDown, Check, Loader2, Download } from "lucide-react";
+import { ChevronDown, Check, Loader2, Download, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -156,6 +165,61 @@ export function ModelSelector({ type = "chat", provider, selectedModel, onModelC
     setPullingModel(null);
   };
 
+  // Use combobox for cloud providers (non-OLLAMA)
+  const useCombobox = fetchedProvider !== "ollama" && fetchedProvider !== "";
+
+  // Combobox for cloud providers
+  if (useCombobox) {
+    return (
+      <Popover open={isOpen} onOpenChange={setIsOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={isOpen}
+            className="w-full justify-between"
+            disabled={isLoading}
+          >
+            <span className="truncate">
+              {isLoading ? "Loading..." : displayModel || "Select model"}
+            </span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Search models..." />
+            <CommandList>
+              <CommandEmpty>No models found.</CommandEmpty>
+              <CommandGroup>
+                {models.map((model) => (
+                  <CommandItem
+                    key={model.name}
+                    value={model.name}
+                    onSelect={() => selectModel(model.name)}
+                    className="flex flex-col items-start gap-1"
+                  >
+                    <div className="flex items-center gap-2 w-full">
+                      <span className="font-medium truncate flex-1">{model.name}</span>
+                      {model.name === displayModel && (
+                        <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground flex gap-2">
+                      {model.size && <span>{model.size}</span>}
+                      <span>{model.context_window.toLocaleString()} tokens</span>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    );
+  }
+
+  // Original dropdown for OLLAMA (with download buttons)
   return (
     <div className="relative" ref={dropdownRef}>
       <Button
@@ -179,9 +243,7 @@ export function ModelSelector({ type = "chat", provider, selectedModel, onModelC
         <div className="absolute top-full left-0 right-0 mt-1 bg-popover border rounded-lg shadow-lg z-50 max-h-[300px] overflow-y-auto">
           {models.length === 0 ? (
             <div className="px-3 py-4 text-sm text-muted-foreground text-center">
-              {fetchedProvider === "ollama"
-                ? "No models found. Pull a model to get started."
-                : "No models available."}
+              No models found. Pull a model to get started.
             </div>
           ) : (
             models.map((model) => (

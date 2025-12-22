@@ -16,7 +16,12 @@ function getStatusColor(status: ProviderStatus["status"]): string {
 }
 
 function getProviderLabel(provider: ProviderStatus["provider"]): string {
-  return provider === "ollama" ? "Ollama" : "Cloud API";
+  const labels: Record<string, string> = {
+    ollama: "Ollama",
+    openrouter: "OpenRouter",
+    venice: "Venice",
+  };
+  return labels[provider] || provider;
 }
 
 export default function ProviderStatusIndicator() {
