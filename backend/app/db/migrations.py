@@ -378,6 +378,135 @@ def migration_015(conn: Connection) -> None:
     conn.execute(text("DROP TABLE IF EXISTS memories_fts"))
 
 
+@migration(16, "Migrate openai provider to specific cloud providers")
+def migration_016(conn: Connection) -> None:
+    """Migrate users from generic 'openai' provider to specific providers.
+
+    Also migrates legacy openai_base_url settings even if ai_provider is not 'openai',
+    since users may have configured cloud providers in the old format.
+    """
+    from ..models_info import CLOUD_PROVIDERS
+
+    # Check current ai_provider setting
+    result = conn.execute(text(
+        "SELECT value FROM settings WHERE key = 'ai_provider'"
+    )).fetchone()
+    ai_provider = result[0] if result else None
+
+    # Get the base URL to determine which provider to migrate to
+    base_url_result = conn.execute(text(
+        "SELECT value FROM settings WHERE key = 'openai_base_url'"
+    )).fetchone()
+    base_url = base_url_result[0] if base_url_result else ""
+
+    # Determine if we have legacy cloud provider settings to migrate
+    cloud_providers_in_url = ["openrouter", "venice"]
+    is_cloud_url = any(p in base_url.lower() for p in cloud_providers_in_url)
+
+    # Skip if no legacy data to migrate:
+    # - ai_provider is not 'openai' AND
+    # - openai_base_url doesn't contain a known cloud provider
+    if ai_provider != "openai" and not is_cloud_url:
+        return
+
+    # Determine new provider based on base URL
+    new_provider = None
+    if "openrouter" in base_url.lower():
+        new_provider = "openrouter"
+    elif "venice" in base_url.lower():
+        new_provider = "venice"
+
+    # If we can't determine the provider, skip migration with a warning
+    if not new_provider:
+        if ai_provider == "openai":
+            print(
+                f"WARNING: Cannot determine cloud provider from base URL '{base_url}'. "
+                "Skipping migration - please configure your provider manually in Settings.",
+                flush=True
+            )
+        return
+
+    print(f"Migrating legacy openai settings to '{new_provider}' provider", flush=True)
+
+    # Get old model settings
+    old_model_result = conn.execute(text(
+        "SELECT value FROM settings WHERE key = 'openai_model'"
+    )).fetchone()
+    old_model = old_model_result[0] if old_model_result else None
+
+    old_embedding_result = conn.execute(text(
+        "SELECT value FROM settings WHERE key = 'openai_embedding_model'"
+    )).fetchone()
+    old_embedding = old_embedding_result[0] if old_embedding_result else None
+
+    # Check if target settings already exist (don't overwrite)
+    existing_model_result = conn.execute(text(
+        "SELECT value FROM settings WHERE key = :key"
+    ), {"key": f"{new_provider}_model"}).fetchone()
+
+    existing_embedding_result = conn.execute(text(
+        "SELECT value FROM settings WHERE key = :key"
+    ), {"key": f"{new_provider}_embedding_model"}).fetchone()
+
+    # Only update ai_provider if it was 'openai' (don't change from ollama)
+    if ai_provider == "openai":
+        conn.execute(text(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES ('ai_provider', :provider)"
+        ), {"provider": new_provider})
+
+        # Update embedding_provider - but Venice doesn't support embeddings,
+        # so fall back to openrouter for embeddings if chat provider is Venice
+        embedding_provider = new_provider if new_provider != "venice" else "openrouter"
+        conn.execute(text(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES ('embedding_provider', :provider)"
+        ), {"provider": embedding_provider})
+
+    # Migrate model setting to new provider-specific key (only if not already set)
+    if not existing_model_result:
+        if old_model:
+            conn.execute(text(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (:key, :value)"
+            ), {"key": f"{new_provider}_model", "value": old_model})
+        else:
+            # Use default from provider config
+            provider_config = CLOUD_PROVIDERS.get(new_provider, {})
+            default_model = provider_config.get("default_chat_model")
+            if default_model:
+                conn.execute(text(
+                    "INSERT OR REPLACE INTO settings (key, value) VALUES (:key, :value)"
+                ), {"key": f"{new_provider}_model", "value": default_model})
+
+    # Migrate embedding model setting (only if not already set)
+    if not existing_embedding_result:
+        if old_embedding:
+            conn.execute(text(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (:key, :value)"
+            ), {"key": f"{new_provider}_embedding_model", "value": old_embedding})
+        else:
+            provider_config = CLOUD_PROVIDERS.get(new_provider, {})
+            default_embedding = provider_config.get("default_embedding_model")
+            if default_embedding:
+                conn.execute(text(
+                    "INSERT OR REPLACE INTO settings (key, value) VALUES (:key, :value)"
+                ), {"key": f"{new_provider}_embedding_model", "value": default_embedding})
+
+    # Copy API key to new provider key name (only if not already set)
+    # The API key is stored as 'api_key_openai', copy to 'api_key_{new_provider}'
+    existing_key_result = conn.execute(text(
+        "SELECT value FROM settings WHERE key = :key"
+    ), {"key": f"api_key_{new_provider}"}).fetchone()
+
+    if not existing_key_result:
+        old_key_result = conn.execute(text(
+            "SELECT value FROM settings WHERE key = 'api_key_openai'"
+        )).fetchone()
+
+        if old_key_result:
+            conn.execute(text(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (:key, :value)"
+            ), {"key": f"api_key_{new_provider}", "value": old_key_result[0]})
+
+
 # --- Migration runner ---
 
 def run_migrations(conn: Connection) -> list[tuple[int, str]]:

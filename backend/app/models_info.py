@@ -1,4 +1,52 @@
-"""Model metadata including context window sizes."""
+"""Model metadata including context window sizes and provider configurations."""
+
+from typing import TypedDict
+
+
+class ProviderConfig(TypedDict, total=False):
+    """Configuration for a cloud AI provider."""
+
+    base_url: str
+    name: str
+    description: str
+    default_chat_model: str | None
+    default_embedding_model: str | None
+    extra_headers: dict[str, str]
+
+
+# Cloud provider configurations
+CLOUD_PROVIDERS: dict[str, ProviderConfig] = {
+    "openrouter": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "name": "OpenRouter",
+        "description": "Access 500+ AI models",
+        "default_chat_model": "anthropic/claude-sonnet-4",
+        "default_embedding_model": "openai/text-embedding-3-small",
+        "extra_headers": {
+            "HTTP-Referer": "https://thinkos.app",
+            "X-Title": "ThinkOS",
+        },
+    },
+    "venice": {
+        "base_url": "https://api.venice.ai/api/v1",
+        "name": "Venice",
+        "description": "Private, uncensored AI",
+        "default_chat_model": "qwen3-235b",
+        "default_embedding_model": None,
+    },
+}
+
+
+def get_provider_config(provider: str) -> ProviderConfig | None:
+    """Get configuration for a cloud provider."""
+    return CLOUD_PROVIDERS.get(provider)
+
+
+def get_provider_base_url(provider: str) -> str | None:
+    """Get base URL for a provider."""
+    config = CLOUD_PROVIDERS.get(provider)
+    return config["base_url"] if config else None
+
 
 # Context window sizes for common models (in tokens)
 MODEL_CONTEXT_WINDOWS = {

@@ -1,6 +1,7 @@
 from typing import AsyncGenerator
 from openai import AsyncOpenAI
 from .. import config
+from ..models_info import get_provider_config
 
 
 # Custom system prompt for Think
@@ -12,29 +13,42 @@ Keep responses conversational and concise. Be helpful and warm, like a knowledge
 
 
 async def get_client() -> AsyncOpenAI:
-    """Get configured OpenAI client (works with Ollama and OpenAI-compatible services)."""
+    """Get configured OpenAI client for the current provider."""
     from .secrets import get_api_key
 
-    if config.settings.ai_provider == "ollama":
+    provider = config.settings.ai_provider
+
+    if provider == "ollama":
         return AsyncOpenAI(
             base_url=config.settings.ollama_base_url,
             api_key="ollama",  # Ollama doesn't need a real key
         )
-    else:
-        api_key = await get_api_key("openai") or ""
-        if config.settings.openai_base_url:
-            return AsyncOpenAI(
-                base_url=config.settings.openai_base_url,
-                api_key=api_key,
-            )
-        return AsyncOpenAI(api_key=api_key)
+
+    # Cloud provider (openrouter, venice)
+    provider_config = get_provider_config(provider)
+    if not provider_config:
+        raise ValueError(f"Unknown provider: {provider}")
+
+    api_key = await get_api_key(provider) or ""
+    extra_headers = provider_config.get("extra_headers", {})
+
+    return AsyncOpenAI(
+        base_url=provider_config["base_url"],
+        api_key=api_key,
+        default_headers=extra_headers if extra_headers else None,
+    )
 
 
 def get_model() -> str:
     """Get the model name based on provider."""
-    if config.settings.ai_provider == "ollama":
+    provider = config.settings.ai_provider
+    if provider == "ollama":
         return config.settings.ollama_model
-    return config.settings.openai_model
+    elif provider == "openrouter":
+        return config.settings.openrouter_model
+    elif provider == "venice":
+        return config.settings.venice_model
+    return ""
 
 
 def build_messages(

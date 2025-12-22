@@ -32,22 +32,30 @@ def load_settings_from_db() -> dict:
 
 
 class Settings(BaseSettings):
-    # AI Provider: "ollama" or "openai"
+    # AI Provider: "ollama", "openrouter", or "venice"
     ai_provider: str = "ollama"
 
     # Ollama settings
     ollama_base_url: str = "http://localhost:11434/v1"
     ollama_model: str = "llama3.2"
 
-    # OpenAI settings (if using cloud)
-    openai_api_key: str = ""  # Deprecated: now stored in DB via secrets service
-    openai_base_url: str = ""  # Custom endpoint for OpenAI-compatible services
-    openai_model: str = "gpt-4o-mini"
+    # OpenRouter settings
+    openrouter_model: str = "anthropic/claude-sonnet-4"
+    openrouter_embedding_model: str = "openai/text-embedding-3-small"
 
-    # Embedding settings
-    embedding_provider: str = "ollama"  # "ollama" or "openai"
+    # Venice settings
+    venice_model: str = "qwen3-235b"
+    venice_embedding_model: str = ""
+
+    # Embedding settings (provider syncs with ai_provider)
+    embedding_provider: str = "ollama"
     ollama_embedding_model: str = "mxbai-embed-large"
-    openai_embedding_model: str = "text-embedding-3-small"
+
+    # Legacy OpenAI settings (for migration only)
+    openai_api_key: str = ""  # Deprecated
+    openai_base_url: str = ""  # Used during migration to detect provider
+    openai_model: str = "gpt-4o-mini"  # Deprecated
+    openai_embedding_model: str = "text-embedding-3-small"  # Deprecated
 
     class Config:
         env_file = ".env"
@@ -62,11 +70,22 @@ def create_settings() -> Settings:
     # may be frozen and not allow attribute assignment after creation
     return Settings(
         ai_provider=saved.get("ai_provider", "ollama"),
-        openai_base_url=saved.get("openai_base_url", ""),
+        # Ollama settings
         ollama_model=saved.get("ollama_model", "llama3.2"),
-        openai_model=saved.get("openai_model", "gpt-4o-mini"),
-        embedding_provider=saved.get("embedding_provider", "ollama"),
         ollama_embedding_model=saved.get("ollama_embedding_model", "mxbai-embed-large"),
+        # OpenRouter settings
+        openrouter_model=saved.get("openrouter_model", "anthropic/claude-sonnet-4"),
+        openrouter_embedding_model=saved.get(
+            "openrouter_embedding_model", "openai/text-embedding-3-small"
+        ),
+        # Venice settings
+        venice_model=saved.get("venice_model", "qwen3-235b"),
+        venice_embedding_model=saved.get("venice_embedding_model", ""),
+        # Embedding provider (syncs with ai_provider)
+        embedding_provider=saved.get("embedding_provider", "ollama"),
+        # Legacy settings (for migration)
+        openai_base_url=saved.get("openai_base_url", ""),
+        openai_model=saved.get("openai_model", "gpt-4o-mini"),
         openai_embedding_model=saved.get("openai_embedding_model", "text-embedding-3-small"),
     )
 
