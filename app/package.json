@@ -1,6 +1,6 @@
 {
   "name": "think-app",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
