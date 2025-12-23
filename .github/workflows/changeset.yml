@@ -47,6 +47,51 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
 
+      - name: Update Release PR Description
+        if: steps.changesets.outputs.pullRequestNumber
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PAT_TOKEN }}
+          script: |
+            const prNumber = ${{ steps.changesets.outputs.pullRequestNumber }};
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+
+            // Extract the package versions and changelog section
+            const body = pr.body || '';
+
+            // Keep everything after the misleading intro text
+            // The useful content starts with package names like "think-app@"
+            const contentMatch = body.match(/(think-[\w-]+@[\s\S]*)/);
+            const releases = contentMatch ? contentMatch[1] : body;
+
+            const newBody = `## Release Summary
+
+            This PR updates version numbers and changelogs. When merged, it will trigger a new release build.
+
+            ### What happens when this PR is merged:
+            1. Package versions are updated
+            2. CHANGELOG.md files are updated
+            3. A git tag is created (e.g., \`v0.6.0\`)
+            4. GitHub Actions builds and publishes:
+               - macOS app (DMG + ZIP)
+               - Windows app (NSIS installer)
+               - Chrome extension (ZIP)
+
+            ---
+
+            ${releases}`.replace(/^ +/gm, '');
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              body: newBody
+            });
+
       - name: Create Release Tag
         if: steps.changesets.outputs.hasChangesets == 'false'
         run: |

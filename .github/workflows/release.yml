@@ -15,10 +15,43 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Extract changelog for version
+        id: changelog
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          # Extract app changelog section (between this version and next version header)
+          APP_CONTENT=$(awk "/^## ${VERSION}$/,/^## [0-9]/" app/CHANGELOG.md | sed '1d;$d' | sed '/^$/d')
+
+          # Extract extension changelog section
+          EXT_CONTENT=$(awk "/^## ${VERSION}$/,/^## [0-9]/" extension/CHANGELOG.md | sed '1d;$d' | sed '/^$/d')
+
+          # Build release notes with headers (skip empty sections)
+          {
+            if [ -n "$APP_CONTENT" ]; then
+              echo "## Desktop App"
+              echo ""
+              echo "$APP_CONTENT"
+              echo ""
+            fi
+
+            if [ -n "$EXT_CONTENT" ]; then
+              echo "## Chrome Extension"
+              echo ""
+              echo "$EXT_CONTENT"
+              echo ""
+            fi
+          } > release-notes.md
+
+          echo "Generated release notes for v${VERSION}:"
+          cat release-notes.md
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          body_path: release-notes.md
           generate_release_notes: true
+          append_body: true
           draft: true
           prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
         env:
