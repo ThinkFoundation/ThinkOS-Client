@@ -1,6 +1,5 @@
 ---
 "think-app": patch
-"think-backend": patch
 ---
 
 feat: add multi-provider support for OpenRouter and Venice
