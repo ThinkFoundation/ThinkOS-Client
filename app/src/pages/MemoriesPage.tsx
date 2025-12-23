@@ -292,6 +292,14 @@ export default function MemoriesPage() {
     setIsPanelOpen(true);
   };
 
+  // Open note editor directly from card
+  const handleEdit = (id: number) => {
+    const memory = memories.find((m) => m.id === id);
+    if (memory) {
+      openNoteEditor(memory);
+    }
+  };
+
   // Close detail panel
   const closePanel = () => {
     setIsPanelOpen(false);
@@ -532,6 +540,7 @@ export default function MemoriesPage() {
                 memory={memory}
                 onRemoveTag={handleRemoveTag}
                 onExpand={handleExpand}
+                onEdit={handleEdit}
                 formatDate={formatDate}
               />
             </div>
