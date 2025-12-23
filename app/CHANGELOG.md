@@ -1,5 +1,39 @@
 # think-app
 
+## 0.5.4
+
+### Patch Changes
+
+- aacc3bd: Add "View all" and "New Conversation" quick actions to dashboard
+
+  - Added "View all" button to Recent Chats card linking to /chat
+  - Renamed "Quick Add" to "Quick Actions" with centered button layout
+  - Added "New Conversation" quick action that starts a fresh chat
+  - Fixed navigation to ensure new conversations don't auto-load previous chat
+
+- 9f7746e: fix: replace fullscreen icon with panel icon in memory overview
+
+  Replace the misleading Maximize2 (fullscreen) icon with a PanelRight icon on memory cards. The button opens a detail sidebar panel, and the new icon accurately represents this behavior.
+
+- d4dfcc3: fix: require confirmation for memory deletion
+
+  Remove delete button from memory card hover menu. Users must now open the
+  detail sidebar panel to delete a memory, which has a confirmation dialog.
+
+- 764021a: feat: add multi-provider support for OpenRouter and Venice
+
+  - Replace generic "Cloud API" with specific provider selection (Ollama, OpenRouter, Venice)
+  - Add per-provider model selection with searchable combobox for cloud providers
+  - Store separate API keys and model preferences per provider
+  - Add migration to convert legacy openai settings to new provider-specific settings
+  - Support provider-specific headers and configurations
+  - Fix model switching for Venice and OpenRouter providers
+
+- de0c614: feat: add edit button for notes in memory card
+
+  Add a pencil icon button on note memory cards that opens the editor
+  directly, without having to go through the detail panel first.
+
 ## 0.5.3
 
 ### Patch Changes

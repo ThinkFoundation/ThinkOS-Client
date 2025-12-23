@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "think-backend"
-version = "0.5.3"
+version = "0.5.4"
 description = "Think backend API"
 authors = ["Your Name <you@example.com>"]
 package-mode = false
