@@ -8,7 +8,7 @@ jobs:
   check-issue-reference:
     name: Check Issue Reference
     runs-on: ubuntu-latest
-    if: ${{ github.event.pull_request.title != 'chore(release): version packages' }}
+    if: "!contains(github.event.pull_request.title, 'chore(release)')"
     steps:
       - name: Check for Issue Link
         uses: actions/github-script@v7
