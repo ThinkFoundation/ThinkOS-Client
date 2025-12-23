@@ -66,20 +66,25 @@ jobs:
             // Keep everything after the misleading intro text
             // The useful content starts with package names like "think-app@"
             const contentMatch = body.match(/(think-[\w-]+@[\s\S]*)/);
-            const releases = contentMatch ? contentMatch[1] : body;
+            let releases = contentMatch ? contentMatch[1] : body;
+
+            // Format releases content:
+            // - Convert package names to H2 headings
+            // - Normalize bullet points to dashes
+            releases = releases
+              .replace(/^(think-[\w-]+@[\d.]+)/gm, '## $1')
+              .replace(/^\* /gm, '- ')
+              .replace(/^  \* /gm, '  - ');
 
             const newBody = `## Release Summary
 
             This PR updates version numbers and changelogs. When merged, it will trigger a new release build.
 
-            ### What happens when this PR is merged:
-            1. Package versions are updated
-            2. CHANGELOG.md files are updated
-            3. A git tag is created (e.g., \`v0.6.0\`)
-            4. GitHub Actions builds and publishes:
-               - macOS app (DMG + ZIP)
-               - Windows app (NSIS installer)
-               - Chrome extension (ZIP)
+            **When merged:**
+            - Package versions are updated
+            - CHANGELOG.md files are updated
+            - A git tag is created (e.g., \`v0.6.0\`)
+            - GitHub Actions builds macOS app, Windows app, and Chrome extension
 
             ---
 
