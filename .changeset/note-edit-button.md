@@ -1,5 +1,5 @@
 ---
-"think-app": minor
+"think-app": patch
 ---
 
 feat: add edit button for notes in memory card
