@@ -152,7 +152,7 @@ export default function HomePage({ userName }: HomePageProps) {
               {recentChats.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No chats yet</p>
               ) : (
-                <ul className="space-y-2">
+                <ul className="space-y-1">
                   {recentChats.map((chat) => (
                     <li
                       key={chat.id}
@@ -160,33 +160,45 @@ export default function HomePage({ userName }: HomePageProps) {
                         selectConversation(chat);
                         navigate("/chat");
                       }}
-                      className="text-sm truncate text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                      className="text-sm truncate text-muted-foreground hover:text-foreground cursor-pointer transition-colors py-1 -mx-2 px-2 rounded hover:bg-muted"
                     >
                       {chat.title || "New conversation"}
                     </li>
                   ))}
                 </ul>
               )}
+              <Link to="/chat">
+                <Button variant="ghost" size="sm" className="mt-2 w-full">
+                  View all
+                </Button>
+              </Link>
             </CardContent>
           </Card>
 
-          {/* Quick Add */}
+          {/* Quick Actions */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Plus className="h-4 w-4" />
-                Quick Add
+                Quick Actions
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-3">
-                Save a new memory manually
-              </p>
-              <Link to="/memories?add=true">
+            <CardContent className="flex flex-col items-center justify-center space-y-3 py-4">
+              <Link to="/memories?add=true" className="w-full">
                 <Button variant="outline" size="sm" className="w-full">
-                  Add Note
+                  New Note
                 </Button>
               </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  navigate("/chat?new=true");
+                }}
+              >
+                New Conversation
+              </Button>
             </CardContent>
           </Card>
         </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { apiFetch } from "@/lib/api";
 import { ChatInput } from "@/components/ChatInput";
 import { ChatMessageList } from "@/components/ChatMessageList";
@@ -19,6 +20,7 @@ export default function ChatPage() {
   const [followupSuggestions, setFollowupSuggestions] = useState<string[]>([]);
   const isStartingNewChatRef = useRef(false);
   const wantsNewChatRef = useRef(false);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Track pending conversation creation to prevent race conditions
   const pendingConversationRef = useRef<{
@@ -256,6 +258,16 @@ export default function ChatPage() {
   const handleChat = useCallback(() => {
     submitChat(message, currentConversationId);
   }, [message, currentConversationId, submitChat]);
+
+  // Effect: Handle ?new=true param from navigation (e.g., from HomePage "New Conversation")
+  useEffect(() => {
+    if (searchParams.get("new") === "true") {
+      wantsNewChatRef.current = true;
+      startNewChat();
+      searchParams.delete("new");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, startNewChat]);
 
   // Effect 1: Handle pending message from navigation (e.g., from HomePage)
   useEffect(() => {
