@@ -5,7 +5,7 @@ import {
   Trash2,
   X,
   Link as LinkIcon,
-  Maximize2,
+  PanelRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -99,7 +99,7 @@ export function MemoryCard({
           className="h-7 w-7 text-muted-foreground hover:text-foreground"
           title="View Details"
         >
-          <Maximize2 className="h-3.5 w-3.5" />
+          <PanelRight className="h-3.5 w-3.5" />
         </Button>
         <Button
           variant="ghost"
