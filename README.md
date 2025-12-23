@@ -6,6 +6,16 @@ Personal AI assistant for saving and chatting with web content.
 
 ![Think App Screenshot](screenshot.png)
 
+## Download
+
+[![Latest Release](https://img.shields.io/github/v/release/ThinkFoundation/ThinkOS-Client)](https://github.com/ThinkFoundation/ThinkOS-Client/releases/latest)
+
+| Platform         | Download                                                                                |
+| ---------------- | --------------------------------------------------------------------------------------- |
+| macOS            | [Download .dmg](https://github.com/ThinkFoundation/ThinkOS-Client/releases/latest)      |
+| Windows          | [Download Installer](https://github.com/ThinkFoundation/ThinkOS-Client/releases/latest) |
+| Chrome Extension | [Download .zip](https://github.com/ThinkFoundation/ThinkOS-Client/releases/latest)      |
+
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) 20+
@@ -17,6 +27,7 @@ Personal AI assistant for saving and chatting with web content.
 ## Platform Notes
 
 **macOS**: Install sqlcipher for database encryption:
+
 ```bash
 brew install sqlcipher
 ```
