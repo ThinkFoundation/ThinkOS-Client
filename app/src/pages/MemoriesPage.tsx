@@ -530,7 +530,6 @@ export default function MemoriesPage() {
             <div key={memory.id} className="break-inside-avoid mb-4">
               <MemoryCard
                 memory={memory}
-                onDelete={handleDelete}
                 onRemoveTag={handleRemoveTag}
                 onExpand={handleExpand}
                 formatDate={formatDate}

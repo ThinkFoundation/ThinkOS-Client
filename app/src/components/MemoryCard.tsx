@@ -2,7 +2,6 @@ import { Button } from "@/components/ui/button";
 import {
   Globe,
   FileText,
-  Trash2,
   X,
   Link as LinkIcon,
   PanelRight,
@@ -27,7 +26,6 @@ interface Memory {
 
 interface MemoryCardProps {
   memory: Memory;
-  onDelete: (id: number) => void;
   onRemoveTag: (memoryId: number, tagId: number) => void;
   onExpand: (id: number) => void;
   formatDate: (date: string) => string;
@@ -65,7 +63,6 @@ function DomainBadge({ url }: { url: string }) {
 
 export function MemoryCard({
   memory,
-  onDelete,
   onRemoveTag,
   onExpand,
   formatDate,
@@ -100,15 +97,6 @@ export function MemoryCard({
           title="View Details"
         >
           <PanelRight className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onDelete(memory.id)}
-          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-          title="Delete"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </div>
 
