@@ -5,6 +5,7 @@ import {
   X,
   Link as LinkIcon,
   PanelRight,
+  Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,7 @@ interface MemoryCardProps {
   memory: Memory;
   onRemoveTag: (memoryId: number, tagId: number) => void;
   onExpand: (id: number) => void;
+  onEdit?: (id: number) => void;
   formatDate: (date: string) => string;
 }
 
@@ -65,6 +67,7 @@ export function MemoryCard({
   memory,
   onRemoveTag,
   onExpand,
+  onEdit,
   formatDate,
 }: MemoryCardProps) {
   return (
@@ -89,6 +92,17 @@ export function MemoryCard({
           "transition-opacity duration-200"
         )}
       >
+        {memory.type === "note" && onEdit && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onEdit(memory.id)}
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            title="Edit Note"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon"
