@@ -60,7 +60,7 @@ export function NoteEditor({
   const [showCloseWarning, setShowCloseWarning] = useState(false);
 
   // Ref for focus
-  const titleInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLTextAreaElement>(null);
   // Track initial content for regeneration check on close
   const initialContentRef = useRef("");
 
@@ -134,6 +134,15 @@ export function NoteEditor({
       document.body.style.overflow = "";
     };
   }, [isOpen]);
+
+  // Auto-resize title textarea when title changes or editor opens
+  useEffect(() => {
+    if (titleInputRef.current && isOpen) {
+      const textarea = titleInputRef.current;
+      textarea.style.height = 'auto';
+      textarea.style.height = textarea.scrollHeight + 'px';
+    }
+  }, [title, isOpen]);
 
   // Handle save - triggers regeneration on successful save
   const handleSave = useCallback(async () => {
@@ -225,13 +234,24 @@ export function NoteEditor({
       <div className="flex-1 overflow-y-auto">
         <div className={editorTokens.content}>
           {/* Title */}
-          <input
+          <textarea
             ref={titleInputRef}
-            type="text"
             placeholder="Untitled"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className={cn(editorTokens.title, "mb-6")}
+            rows={1}
+            className={cn(editorTokens.title, "mb-6 resize-none overflow-hidden")}
+            onInput={(e) => {
+              const target = e.target as HTMLTextAreaElement;
+              target.style.height = 'auto';
+              target.style.height = target.scrollHeight + 'px';
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                editor?.chain().focus().run();
+              }
+            }}
           />
 
           {/* Editor */}
