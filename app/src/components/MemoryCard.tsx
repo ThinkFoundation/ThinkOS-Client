@@ -80,7 +80,7 @@ export function MemoryCard({
         "shadow-sm shadow-black/5 dark:shadow-black/20",
         // Hover lift effect
         "hover:shadow-lg hover:shadow-black/10 dark:hover:shadow-black/30",
-        "hover:scale-[1.01] hover:-translate-y-0.5",
+        "hover:-translate-y-0.5",
         "transition-all duration-200"
       )}
     >
