@@ -152,7 +152,7 @@ export function useVideoUpload() {
         updateProgress("uploading_audio", 75, "Uploading audio...");
         if (processResult.audio) {
           const audioFormData = new FormData();
-          audioFormData.append("file", new File([processResult.audio], "audio.m4a", { type: "audio/mp4" }));
+          audioFormData.append("file", new File([processResult.audio.buffer.slice(0) as ArrayBuffer], "audio.m4a", { type: "audio/mp4" }));
 
           const audioResponse = await apiFetch(`/api/video/${memoryId}/audio`, {
             method: "POST",
@@ -171,7 +171,7 @@ export function useVideoUpload() {
           const thumbnailFormData = new FormData();
           thumbnailFormData.append(
             "file",
-            new File([processResult.thumbnail], "thumbnail.jpg", { type: "image/jpeg" })
+            new File([processResult.thumbnail.buffer.slice(0) as ArrayBuffer], "thumbnail.jpg", { type: "image/jpeg" })
           );
 
           const thumbnailResponse = await apiFetch(`/api/video/${memoryId}/thumbnail`, {
