@@ -17,14 +17,20 @@ function createTray(mainWindow, appToken, isDev) {
   let icon;
 
   try {
+    // In packaged app, icons are in dist/icons (copied by Vite from public)
+    // In dev, icons are in public/icons
+    const iconsDir = app.isPackaged
+      ? path.join(__dirname, '../dist/icons')
+      : path.join(__dirname, '../public/icons');
+
     if (process.platform === 'darwin') {
       // macOS: use template icon (auto-adapts to light/dark menu bar)
-      const templatePath = path.join(__dirname, '../public/icons/tray-iconTemplate.png');
+      const templatePath = path.join(iconsDir, 'tray-iconTemplate.png');
       icon = nativeImage.createFromPath(templatePath);
       icon.setTemplateImage(true);
     } else {
       // Windows/Linux: use colored icon at 32x32
-      const iconPath = path.join(__dirname, '../public/icons/think-os-agent.png');
+      const iconPath = path.join(iconsDir, 'think-os-agent.png');
       icon = nativeImage.createFromPath(iconPath).resize({ width: 32, height: 32 });
     }
   } catch (err) {
