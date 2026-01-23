@@ -10,7 +10,7 @@ import { AttachedMemoryChips } from "@/components/AttachedMemoryChips";
 import { useConversation } from "@/contexts/ConversationContext";
 import { useConversations } from "@/hooks/useConversations";
 import type { ChatMessage } from "@/types/chat";
-import { FileText, Pin, Trash2 } from "lucide-react";
+import { FileText, Pin, Trash2, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +18,7 @@ export default function ChatPage() {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [followupSuggestions, setFollowupSuggestions] = useState<string[]>([]);
+  const [useMemories, setUseMemories] = useState(true);
   const isStartingNewChatRef = useRef(false);
   const wantsNewChatRef = useRef(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -145,6 +146,7 @@ export default function ChatPage() {
           message: userMessage.content,
           conversation_id: effectiveConversationId,
           attached_memory_ids: memoriesToSend.length > 0 ? memoriesToSend.map((m) => m.id) : undefined,
+          skip_memory_context: !useMemories,
         }),
       });
 
@@ -252,7 +254,7 @@ export default function ChatPage() {
       // Clear pending conversation ref
       pendingConversationRef.current = null;
     }
-  }, [addMessage, updateMessage, setCurrentConversationId, updateContextWindow, attachedMemories, clearAttachedMemories]);
+  }, [addMessage, updateMessage, setCurrentConversationId, updateContextWindow, attachedMemories, clearAttachedMemories, useMemories]);
 
   // Handler for manual chat input
   const handleChat = useCallback(() => {
@@ -380,6 +382,21 @@ export default function ChatPage() {
                     attachedMemories.length > 0
                       ? `Ask about ${attachedMemories[0].title}...`
                       : "Type your message..."
+                  }
+                  leftContent={
+                    <button
+                      onClick={() => setUseMemories(!useMemories)}
+                      className={cn(
+                        "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors",
+                        useMemories
+                          ? "bg-muted/50 text-muted-foreground"
+                          : "bg-destructive/10 text-destructive"
+                      )}
+                      title={useMemories ? "Click to disable memory context" : "Click to enable memory context"}
+                    >
+                      <Brain className="h-3 w-3" />
+                      <span>{useMemories ? "Memory on" : "Memory off"}</span>
+                    </button>
                   }
                 />
               </div>

@@ -10,6 +10,7 @@ interface ChatInputProps {
   isLoading?: boolean;
   placeholder?: string;
   className?: string;
+  leftContent?: React.ReactNode;
 }
 
 export function ChatInput({
@@ -19,6 +20,7 @@ export function ChatInput({
   isLoading,
   placeholder = "Type your message...",
   className,
+  leftContent,
 }: ChatInputProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -53,7 +55,7 @@ export function ChatInput({
   return (
     <div
       className={cn(
-        "relative flex items-end gap-2 p-2 rounded-2xl",
+        "relative rounded-2xl p-2",
         // Glassmorphism
         "bg-white/70 dark:bg-white/5 backdrop-blur-xl",
         "border border-white/60 dark:border-white/10",
@@ -62,33 +64,40 @@ export function ChatInput({
         className
       )}
     >
-      <textarea
-        ref={inputRef}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        disabled={isLoading}
-        rows={1}
-        className={cn(
-          "flex-1 bg-transparent px-4 py-2 text-base min-h-[44px] max-h-[200px] resize-none",
-          "placeholder:text-muted-foreground/60",
-          "focus:outline-none",
-          "disabled:opacity-50"
-        )}
-      />
-      <Button
-        size="icon"
-        className="h-10 w-10 rounded-full shrink-0"
-        onClick={onSubmit}
-        disabled={isLoading || !value.trim()}
-      >
-        {isLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Send className="h-4 w-4" />
-        )}
-      </Button>
+      <div className="flex items-end gap-2">
+        <textarea
+          ref={inputRef}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          disabled={isLoading}
+          rows={1}
+          className={cn(
+            "flex-1 bg-transparent px-4 py-2 text-base min-h-[44px] max-h-[200px] resize-none",
+            "placeholder:text-muted-foreground/60",
+            "focus:outline-none",
+            "disabled:opacity-50"
+          )}
+        />
+        <Button
+          size="icon"
+          className="h-10 w-10 rounded-full shrink-0"
+          onClick={onSubmit}
+          disabled={isLoading || !value.trim()}
+        >
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Send className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
+      {leftContent && (
+        <div className="px-2 pt-1">
+          {leftContent}
+        </div>
+      )}
     </div>
   );
 }

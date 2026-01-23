@@ -42,6 +42,7 @@ class ChatRequest(BaseModel):
     conversation_id: int | None = None
     mode: str = "quick"
     attached_memory_ids: list[int] | None = None
+    skip_memory_context: bool = False
 
 
 # Conversation schemas

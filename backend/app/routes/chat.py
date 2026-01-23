@@ -52,12 +52,12 @@ async def chat_suggestions():
 
 
 async def _retrieve_context(
-    message: str, history: list[dict], attached_memory_ids: list[int] | None = None
+    message: str, history: list[dict], attached_memory_ids: list[int] | None = None, skip_rag: bool = False
 ) -> tuple[str, list[dict]]:
     """Retrieve relevant context and sources using RAG.
 
     If attached_memory_ids are provided, those memories are included as primary context.
-    RAG retrieval still runs to supplement with additional relevant memories.
+    RAG retrieval still runs to supplement with additional relevant memories (unless skip_rag=True).
 
     Returns:
         tuple[str, list[dict]]: (context string, list of source dicts)
@@ -83,8 +83,8 @@ async def _retrieve_context(
             attached_context = "## User's Selected Memory:\n" + format_memories_as_context(attached_memories)
             logger.info(f"Using {len(attached_memories)} attached memories as context")
 
-    # Skip RAG for very short messages (< 10 chars)
-    if len(message.strip()) < 10:
+    # Skip RAG for very short messages (< 10 chars) or when explicitly disabled
+    if len(message.strip()) < 10 or skip_rag:
         return attached_context, sources
 
     try:
@@ -192,7 +192,7 @@ async def chat(request: ChatRequest):
         ]
 
     # --- RAG: Retrieve relevant memories ---
-    context, sources = await _retrieve_context(request.message, history, request.attached_memory_ids)
+    context, sources = await _retrieve_context(request.message, history, request.attached_memory_ids, skip_rag=request.skip_memory_context)
 
     try:
         response = await ai_chat(request.message, context=context, history=history)
@@ -282,14 +282,14 @@ async def chat_stream(request: ChatRequest):
         ]
 
     # RAG: Retrieve relevant memories
-    context, sources = await _retrieve_context(request.message, history, request.attached_memory_ids)
+    context, sources = await _retrieve_context(request.message, history, request.attached_memory_ids, skip_rag=request.skip_memory_context)
 
     async def generate():
         full_response = ""
         usage_data = None
 
         # Send metadata first (conversation_id, sources)
-        yield f"data: {json.dumps({'type': 'meta', 'conversation_id': conversation_id, 'sources': sources, 'searched': True})}\n\n"
+        yield f"data: {json.dumps({'type': 'meta', 'conversation_id': conversation_id, 'sources': sources, 'searched': not request.skip_memory_context})}\n\n"
 
         try:
             async for token, usage in ai_chat_stream(request.message, context=context, history=history):
