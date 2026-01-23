@@ -9,8 +9,41 @@ export interface SourceMemory {
 export interface AttachedMemory {
   id: number;
   title: string;
-  type: "web" | "note";
+  type: "web" | "note" | "voice_memo" | "audio" | "video" | "voice"; // "voice" for backwards compat
   url?: string;
+}
+
+export type MemoryType = "web" | "note" | "voice_memo" | "audio" | "video" | "voice"; // "voice" for backwards compat
+
+export type MediaSource = "recording" | "upload";
+
+export type TranscriptionStatus = "pending" | "processing" | "completed" | "failed";
+
+export interface TranscriptSegment {
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface MediaMemoryFields {
+  audio_duration?: number;
+  transcription_status?: TranscriptionStatus;
+  transcript?: string;
+  transcript_segments?: TranscriptSegment[];
+  media_source?: MediaSource;
+}
+
+// Alias for backwards compatibility
+export type VoiceMemoryFields = MediaMemoryFields;
+
+export type VideoProcessingStatus = "pending_extraction" | "extracting" | "ready" | "failed";
+
+export interface VideoMemoryFields extends MediaMemoryFields {
+  video_duration?: number;
+  video_width?: number;
+  video_height?: number;
+  thumbnail_path?: string;
+  video_processing_status?: VideoProcessingStatus;
 }
 
 export interface TokenUsage {

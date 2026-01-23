@@ -507,6 +507,52 @@ def migration_016(conn: Connection) -> None:
             ), {"key": f"api_key_{new_provider}", "value": old_key_result[0]})
 
 
+@migration(17, "Add media memory columns for voice, audio, and video")
+def migration_017(conn: Connection) -> None:
+    """Add all columns for media memory support (voice memos, audio uploads, video).
+
+    Columns added:
+    - Audio: audio_path, audio_format, audio_duration, transcript, transcription_status,
+             transcript_segments, media_source
+    - Video: video_path, video_format, video_duration, thumbnail_path, video_width,
+             video_height, video_processing_status
+    """
+    result = conn.execute(text("PRAGMA table_info(memories)")).fetchall()
+    columns = [row[1] for row in result]
+
+    # Audio/voice columns
+    if "audio_path" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN audio_path VARCHAR(500)"))
+    if "audio_format" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN audio_format VARCHAR(20)"))
+    if "audio_duration" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN audio_duration REAL"))
+    if "transcript" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN transcript TEXT"))
+    if "transcription_status" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN transcription_status VARCHAR(20)"))
+    if "transcript_segments" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN transcript_segments TEXT"))
+    if "media_source" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN media_source VARCHAR(20)"))
+
+    # Video columns
+    if "video_path" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN video_path VARCHAR(500)"))
+    if "video_format" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN video_format VARCHAR(20)"))
+    if "video_duration" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN video_duration REAL"))
+    if "thumbnail_path" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN thumbnail_path VARCHAR(500)"))
+    if "video_width" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN video_width INTEGER"))
+    if "video_height" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN video_height INTEGER"))
+    if "video_processing_status" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN video_processing_status VARCHAR(20)"))
+
+
 # --- Migration runner ---
 
 def run_migrations(conn: Connection) -> list[tuple[int, str]]:

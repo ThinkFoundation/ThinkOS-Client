@@ -33,6 +33,14 @@
           "think-native-stub",
           "think-native-stub.exe"
         ]
+      },
+      {
+        "from": "node_modules/ffmpeg-static/ffmpeg",
+        "to": "ffmpeg/ffmpeg"
+      },
+      {
+        "from": "node_modules/ffmpeg-static/ffmpeg.exe",
+        "to": "ffmpeg/ffmpeg.exe"
       }
     ],
     "mac": {
@@ -66,6 +74,7 @@
     }
   },
   "dependencies": {
+    "ffmpeg-static": "^5.2.0",
     "@microsoft/fetch-event-source": "^2.0.1",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-popover": "^1.1.15",
@@ -97,6 +106,7 @@
     "electron-builder": "^25.1.8",
     "png-to-ico": "^3.0.1",
     "postcss": "^8.4.49",
+    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.15",
     "typescript": "^5.6.3",
     "vite": "^6.0.1",

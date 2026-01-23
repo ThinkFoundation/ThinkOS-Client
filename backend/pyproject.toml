@@ -18,8 +18,13 @@ rotki-pysqlcipher3 = "^2024.10.1"
 sqlalchemy = {extras = ["asyncio"], version = "^2.0.0"}
 sqlite-vec = "^0.1.0"
 numpy = "^2.0.0"
+# Voice memory support
+faster-whisper = "^1.0.0"
+mutagen = "^1.47.0"
+cryptography = "^43.0.0"
 # Windows-only: pywin32 for native messaging stub
 pywin32 = {version = "^306", markers = "sys_platform == 'win32'"}
+python-multipart = "^0.0.21"
 
 [tool.poetry.group.dev.dependencies]
 pyinstaller = "^6.0.0"

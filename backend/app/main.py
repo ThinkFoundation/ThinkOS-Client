@@ -5,9 +5,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+import httpx
 
 from .db import is_db_initialized
 from .routes import router
+from . import config
 
 # Configure logging for all app modules
 logging.basicConfig(
@@ -33,9 +35,41 @@ class EndpointFilter(logging.Filter):
 # Apply filter to uvicorn access logger
 logging.getLogger("uvicorn.access").addFilter(EndpointFilter())
 
+logger = logging.getLogger(__name__)
+
+
+async def check_ollama_model():
+    """Log warning if configured Ollama model is not available."""
+    if config.settings.ai_provider != "ollama":
+        return
+
+    model = config.settings.ollama_model
+    base_url = config.settings.ollama_base_url.replace("/v1", "")
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(f"{base_url}/api/tags")
+            if response.status_code == 200:
+                models = response.json().get("models", [])
+                model_names = [m.get("name", "").split(":")[0] for m in models]
+                if model.split(":")[0] in model_names:
+                    logger.info(f"Ollama model '{model}' is available")
+                else:
+                    logger.warning(
+                        f"Ollama model '{model}' not found - "
+                        "AI features will fail until model is downloaded via Setup Wizard"
+                    )
+    except httpx.ConnectError:
+        logger.warning("Ollama is not running")
+    except Exception as e:
+        logger.warning(f"Could not check Ollama: {e}")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Check Ollama model availability (logs warning if missing)
+    await check_ollama_model()
+
     # Start native messaging socket server for secure extension communication
     from .native_messaging import start_native_messaging_server, stop_native_messaging_server
 

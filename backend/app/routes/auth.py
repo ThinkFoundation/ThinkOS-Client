@@ -3,6 +3,8 @@ from fastapi import APIRouter, HTTPException
 from ..config import reload_settings
 from ..db import init_db, is_db_initialized, db_exists, reset_db_connection
 from ..services.secrets import derive_db_key, set_api_key, get_api_key, delete_api_key
+from ..services.audio_storage import set_encryption_key as set_audio_encryption_key, clear_encryption_key as clear_audio_encryption_key
+from ..services.video_storage import set_encryption_key as set_video_encryption_key, clear_encryption_key as clear_video_encryption_key
 from ..schemas import SetPasswordRequest, UnlockRequest, ApiKeyRequest
 
 
@@ -28,6 +30,10 @@ async def setup_password(request: SetPasswordRequest):
     await init_db(db_key)
     reload_settings()  # Load settings from newly created DB
 
+    # Initialize encryption keys for media storage
+    set_audio_encryption_key(request.password)
+    set_video_encryption_key(request.password)
+
     return {"success": True}
 
 
@@ -44,6 +50,11 @@ async def unlock(request: UnlockRequest):
         raise HTTPException(status_code=401, detail="Invalid password")
 
     reload_settings()  # Load settings from unlocked DB
+
+    # Initialize encryption keys for media storage
+    set_audio_encryption_key(request.password)
+    set_video_encryption_key(request.password)
+
     return {"success": True}
 
 
@@ -51,6 +62,9 @@ async def unlock(request: UnlockRequest):
 async def logout():
     """Lock the database (logout)."""
     reset_db_connection()
+    # Clear media encryption keys
+    clear_audio_encryption_key()
+    clear_video_encryption_key()
     return {"success": True}
 
 

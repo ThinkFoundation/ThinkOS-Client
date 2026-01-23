@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, Text, DateTime, LargeBinary, ForeignKey, Integer
+from sqlalchemy import String, Text, DateTime, LargeBinary, ForeignKey, Integer, Float
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -11,8 +11,9 @@ class Memory(Base):
     __tablename__ = "memories"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    type: Mapped[str] = mapped_column(String(20), default="web")
+    type: Mapped[str] = mapped_column(String(20), default="web")  # "web" | "note" | "voice_memo" | "audio" | "video"
     url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    media_source: Mapped[str | None] = mapped_column(String(20), nullable=True)  # "recording" | "upload"
     title: Mapped[str | None] = mapped_column(String(500), nullable=True)
     original_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -22,6 +23,23 @@ class Memory(Base):
     embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     processing_attempts: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    # Voice memory fields
+    audio_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    audio_format: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    audio_duration: Mapped[float | None] = mapped_column(Float, nullable=True)
+    transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
+    transcription_status: Mapped[str | None] = mapped_column(String(20), nullable=True)  # "pending" | "processing" | "completed" | "failed"
+    transcript_segments: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of {start, end, text}
+
+    # Video memory fields
+    video_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    video_format: Mapped[str | None] = mapped_column(String(20), nullable=True)  # mp4, webm, mov, mkv, avi
+    video_duration: Mapped[float | None] = mapped_column(Float, nullable=True)
+    thumbnail_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    video_width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    video_height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    video_processing_status: Mapped[str | None] = mapped_column(String(20), nullable=True)  # "pending_extraction" | "extracting" | "ready" | "failed"
 
     tags: Mapped[list["MemoryTag"]] = relationship(back_populates="memory", cascade="all, delete-orphan")
 
