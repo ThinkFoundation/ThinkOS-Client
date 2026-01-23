@@ -3,11 +3,38 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MemoryCard } from "@/components/MemoryCard";
+import { VoiceMemoCard } from "@/components/VoiceMemoCard";
+import { AudioCard } from "@/components/AudioCard";
+import { VideoCard } from "@/components/VideoCard";
 import { MemoryDetailPanel } from "@/components/MemoryDetailPanel";
+import { AudioDropOverlay } from "@/components/AudioDropOverlay";
 import { NoteEditor } from "@/components/editor";
-import { Plus, Search, Loader2, ChevronDown } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Loader2,
+  ChevronDown,
+  Upload,
+  Globe,
+  FileText,
+  Mic,
+  FileAudio,
+  Video,
+  LayoutGrid,
+  Check,
+  Calendar,
+} from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { useMemoryEvents } from "../hooks/useMemoryEvents";
+import { useVideoUpload } from "../hooks/useVideoUpload";
 import { apiFetch } from "@/lib/api";
+import type { TranscriptionStatus, VideoProcessingStatus } from "@/types/chat";
 
 interface MemoryTag {
   id: number;
@@ -17,16 +44,27 @@ interface MemoryTag {
 
 interface Memory {
   id: number;
-  type: "web" | "note";
+  type: "web" | "note" | "voice_memo" | "audio" | "video" | "voice"; // "voice" for backwards compat
   url: string | null;
   title: string;
   summary: string | null;
   tags: MemoryTag[];
   created_at: string;
+  // Media-specific fields (voice memos and audio uploads)
+  audio_duration?: number;
+  transcription_status?: TranscriptionStatus;
+  media_source?: "recording" | "upload";
+  // Video-specific fields
+  video_duration?: number;
+  video_width?: number;
+  video_height?: number;
+  thumbnail_path?: string;
+  video_processing_status?: VideoProcessingStatus;
 }
 
 interface MemoryWithContent extends Memory {
   content?: string;
+  transcript?: string;
 }
 
 interface Tag {
@@ -35,8 +73,24 @@ interface Tag {
   usage_count: number;
 }
 
-type TypeFilter = "all" | "web" | "note";
+type TypeFilter = "all" | "web" | "note" | "voice_memo" | "audio" | "video";
 type DateFilter = "all" | "today" | "week" | "month";
+
+const TYPE_FILTER_OPTIONS = [
+  { value: "all", label: "All", icon: LayoutGrid, iconColor: "text-muted-foreground" },
+  { value: "web", label: "Web", icon: Globe, iconColor: "text-muted-foreground" },
+  { value: "note", label: "Notes", icon: FileText, iconColor: "text-amber-600" },
+  { value: "voice_memo", label: "Voice Memos", icon: Mic, iconColor: "text-orange-600" },
+  { value: "audio", label: "Audio", icon: FileAudio, iconColor: "text-blue-600" },
+  { value: "video", label: "Video", icon: Video, iconColor: "text-purple-600" },
+] as const;
+
+const DATE_FILTER_OPTIONS = [
+  { value: "all", label: "All Time" },
+  { value: "today", label: "Today" },
+  { value: "week", label: "This Week" },
+  { value: "month", label: "This Month" },
+] as const;
 
 export default function MemoriesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -50,7 +104,9 @@ export default function MemoriesPage() {
 
   // Filter state
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [typeFilterOpen, setTypeFilterOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Semantic search state
@@ -73,7 +129,147 @@ export default function MemoriesPage() {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
+  // File upload refs
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // New menu state
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
+
+  // Video upload hook
+  const { uploadVideo, uploadProgress, isUploading: isUploadingVideo } = useVideoUpload();
+
   const LIMIT = 20;
+
+  // Supported file extensions
+  const AUDIO_EXTENSIONS = ["mp3", "wav", "m4a", "webm", "ogg", "flac"];
+  const VIDEO_EXTENSIONS = ["mp4", "webm", "mov", "mkv", "avi"];
+
+  // File size limits (in bytes)
+  const MAX_AUDIO_SIZE = 100 * 1024 * 1024; // 100 MB
+  const MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500 MB
+
+  // File upload handler (audio and video)
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const fileArray = Array.from(files);
+
+    // Separate audio and video files
+    const audioFiles = fileArray.filter((file) => {
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      return ext && AUDIO_EXTENSIONS.includes(ext);
+    });
+
+    const videoFiles = fileArray.filter((file) => {
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      return ext && VIDEO_EXTENSIONS.includes(ext);
+    });
+
+    if (audioFiles.length === 0 && videoFiles.length === 0) {
+      toast.error("No supported files detected", {
+        description: `Audio: ${AUDIO_EXTENSIONS.join(", ")} | Video: ${VIDEO_EXTENSIONS.join(", ")}`,
+      });
+      return;
+    }
+
+    // Validate file sizes
+    const oversizedAudio = audioFiles.filter((f) => f.size > MAX_AUDIO_SIZE);
+    const oversizedVideo = videoFiles.filter((f) => f.size > MAX_VIDEO_SIZE);
+
+    if (oversizedAudio.length > 0) {
+      toast.error(`${oversizedAudio.length} audio file(s) exceed 100 MB limit`, {
+        description: oversizedAudio.map((f) => f.name).join(", "),
+      });
+    }
+
+    if (oversizedVideo.length > 0) {
+      toast.error(`${oversizedVideo.length} video file(s) exceed 500 MB limit`, {
+        description: oversizedVideo.map((f) => f.name).join(", "),
+      });
+    }
+
+    // Filter out oversized files
+    const validAudioFiles = audioFiles.filter((f) => f.size <= MAX_AUDIO_SIZE);
+    const validVideoFiles = videoFiles.filter((f) => f.size <= MAX_VIDEO_SIZE);
+
+    if (validAudioFiles.length === 0 && validVideoFiles.length === 0) {
+      return;
+    }
+
+    // Upload audio files
+    if (validAudioFiles.length > 0) {
+      setIsUploading(true);
+      try {
+        const uploadPromises = validAudioFiles.map(async (file) => {
+          const formData = new FormData();
+          formData.append("file", file);
+          const response = await apiFetch("/api/media/upload", {
+            method: "POST",
+            body: formData,
+          });
+          if (!response.ok) {
+            throw new Error("Upload failed");
+          }
+          return { success: true, name: file.name };
+        });
+
+        const results = await Promise.all(
+          uploadPromises.map((p) => p.catch((e) => ({ success: false, error: e })))
+        );
+        const successful = results.filter((r) => r.success);
+        const failed = results.filter((r) => !r.success);
+
+        if (successful.length > 0) {
+          toast.success(
+            successful.length === 1
+              ? "Audio file uploaded"
+              : `${successful.length} audio files uploaded`,
+            { description: "Transcription will begin shortly" }
+          );
+          fetchMemories(true);
+        }
+
+        if (failed.length > 0) {
+          toast.error(`Failed to upload ${failed.length} audio file(s)`);
+        }
+      } catch (error) {
+        toast.error("Audio upload failed");
+      } finally {
+        setIsUploading(false);
+      }
+    }
+
+    // Upload video files (one at a time due to FFmpeg processing)
+    for (const videoFile of validVideoFiles) {
+      toast.info(`Processing ${videoFile.name}...`, {
+        description: "Extracting audio for transcription",
+        duration: 5000,
+      });
+
+      const result = await uploadVideo(videoFile);
+
+      if (result.success) {
+        toast.success(`Video uploaded: ${videoFile.name}`, {
+          description: "Transcription will begin shortly",
+        });
+        fetchMemories(true);
+      } else {
+        toast.error(`Failed to upload ${videoFile.name}`, {
+          description: result.error,
+        });
+      }
+    }
+
+    // Reset file inputs
+    if (audioInputRef.current) {
+      audioInputRef.current.value = "";
+    }
+    if (videoInputRef.current) {
+      videoInputRef.current.value = "";
+    }
+  };
 
   // Helper to check if a memory matches current filters
   const matchesFilters = useCallback(
@@ -120,8 +316,8 @@ export default function MemoriesPage() {
       }
     },
     onMemoryUpdated: (memoryId, data) => {
-      const memory = data as Memory;
-      setMemories((prev) => prev.map((m) => (m.id === memoryId ? memory : m)));
+      const update = data as Partial<Memory>;
+      setMemories((prev) => prev.map((m) => (m.id === memoryId ? { ...m, ...update } : m)));
     },
     onMemoryDeleted: (memoryId) => {
       setMemories((prev) => prev.filter((m) => m.id !== memoryId));
@@ -419,10 +615,80 @@ export default function MemoriesPage() {
           <h1 className="text-2xl font-semibold">Memories</h1>
           <p className="text-sm text-muted-foreground">{total} total</p>
         </div>
-        <Button onClick={() => openNoteEditor()}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Note
-        </Button>
+        {/* Hidden file inputs */}
+        <input
+          ref={audioInputRef}
+          type="file"
+          accept="audio/*"
+          multiple
+          className="hidden"
+          onChange={(e) => handleFileUpload(e.target.files)}
+        />
+        <input
+          ref={videoInputRef}
+          type="file"
+          accept="video/*"
+          multiple
+          className="hidden"
+          onChange={(e) => handleFileUpload(e.target.files)}
+        />
+
+        {/* New dropdown */}
+        <Popover open={newMenuOpen} onOpenChange={setNewMenuOpen}>
+          <PopoverTrigger asChild>
+            <Button disabled={isUploading || isUploadingVideo}>
+              {isUploading || isUploadingVideo ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4 mr-2" />
+              )}
+              New
+              <ChevronDown className="h-4 w-4 ml-1" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[160px] p-1" align="end">
+            <button
+              className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-sm hover:bg-muted/50 cursor-pointer"
+              onClick={() => {
+                openNoteEditor();
+                setNewMenuOpen(false);
+              }}
+            >
+              <FileText className="h-4 w-4 text-amber-600" />
+              <span>Add Note</span>
+            </button>
+            <button
+              className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-sm hover:bg-muted/50 cursor-pointer"
+              onClick={() => {
+                window.electronAPI?.openRecordingWindow();
+                setNewMenuOpen(false);
+              }}
+            >
+              <Mic className="h-4 w-4 text-orange-600" />
+              <span>Voice Memo</span>
+            </button>
+            <button
+              className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-sm hover:bg-muted/50 cursor-pointer"
+              onClick={() => {
+                audioInputRef.current?.click();
+                setNewMenuOpen(false);
+              }}
+            >
+              <FileAudio className="h-4 w-4 text-blue-600" />
+              <span>Upload Audio</span>
+            </button>
+            <button
+              className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-sm hover:bg-muted/50 cursor-pointer"
+              onClick={() => {
+                videoInputRef.current?.click();
+                setNewMenuOpen(false);
+              }}
+            >
+              <Video className="h-4 w-4 text-purple-600" />
+              <span>Upload Video</span>
+            </button>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Memory Detail Panel */}
@@ -456,57 +722,115 @@ export default function MemoriesPage() {
         }
       />
 
+      {/* Audio Drop Overlay */}
+      <AudioDropOverlay onUploadComplete={() => fetchMemories(true)} />
+
       {/* Filters */}
       <div className="flex flex-wrap gap-4 mb-6">
-        {/* Type filter */}
-        <div className="flex rounded-md border">
-          {(["all", "web", "note"] as TypeFilter[]).map((type) => (
-            <button
-              key={type}
-              className={`px-3 py-1.5 text-sm capitalize ${
-                typeFilter === type
-                  ? "bg-primary text-primary-foreground"
-                  : "hover:bg-muted"
-              } ${type === "all" ? "rounded-l-md" : ""} ${
-                type === "note" ? "rounded-r-md" : ""
-              }`}
-              onClick={() => setTypeFilter(type)}
+        {/* Type filter dropdown */}
+        <Popover open={typeFilterOpen} onOpenChange={setTypeFilterOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className="flex items-center gap-2 min-w-[150px] justify-between"
             >
-              {type === "all" ? "All" : type === "web" ? "Web" : "Notes"}
-            </button>
-          ))}
-        </div>
+              <span className="flex items-center gap-2">
+                {(() => {
+                  const option = TYPE_FILTER_OPTIONS.find(
+                    (o) => o.value === typeFilter
+                  );
+                  const Icon = option?.icon || LayoutGrid;
+                  return (
+                    <>
+                      <Icon className={cn("h-4 w-4", option?.iconColor)} />
+                      <span>{option?.label || "All"}</span>
+                    </>
+                  );
+                })()}
+              </span>
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 transition-transform",
+                  typeFilterOpen && "rotate-180"
+                )}
+              />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[180px] p-1" align="start">
+            {TYPE_FILTER_OPTIONS.map((option) => {
+              const Icon = option.icon;
+              const isSelected = typeFilter === option.value;
+              return (
+                <button
+                  key={option.value}
+                  className={cn(
+                    "flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-sm",
+                    "hover:bg-muted/50 cursor-pointer",
+                    isSelected && "bg-muted"
+                  )}
+                  onClick={() => {
+                    setTypeFilter(option.value);
+                    setTypeFilterOpen(false);
+                  }}
+                >
+                  <Icon className={cn("h-4 w-4", option.iconColor)} />
+                  <span className="flex-1 text-left">{option.label}</span>
+                  {isSelected && (
+                    <Check className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+          </PopoverContent>
+        </Popover>
 
-        {/* Date filter */}
-        <div className="relative">
-          <button
-            className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-muted"
-            onClick={() => {
-              const select = document.getElementById("date-select");
-              if (select) (select as HTMLSelectElement).click();
-            }}
-          >
-            {dateFilter === "all"
-              ? "All Time"
-              : dateFilter === "today"
-              ? "Today"
-              : dateFilter === "week"
-              ? "This Week"
-              : "This Month"}
-            <ChevronDown className="h-4 w-4" />
-          </button>
-          <select
-            id="date-select"
-            className="absolute inset-0 opacity-0 cursor-pointer"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value as DateFilter)}
-          >
-            <option value="all">All Time</option>
-            <option value="today">Today</option>
-            <option value="week">This Week</option>
-            <option value="month">This Month</option>
-          </select>
-        </div>
+        {/* Date filter dropdown */}
+        <Popover open={dateFilterOpen} onOpenChange={setDateFilterOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className="flex items-center gap-2 min-w-[130px] justify-between"
+            >
+              <span className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <span>
+                  {DATE_FILTER_OPTIONS.find((o) => o.value === dateFilter)
+                    ?.label || "All Time"}
+                </span>
+              </span>
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 transition-transform",
+                  dateFilterOpen && "rotate-180"
+                )}
+              />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[150px] p-1" align="start">
+            {DATE_FILTER_OPTIONS.map((option) => {
+              const isSelected = dateFilter === option.value;
+              return (
+                <button
+                  key={option.value}
+                  className={cn(
+                    "flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-sm",
+                    "hover:bg-muted/50 cursor-pointer",
+                    isSelected && "bg-muted"
+                  )}
+                  onClick={() => {
+                    setDateFilter(option.value);
+                    setDateFilterOpen(false);
+                  }}
+                >
+                  <span className="flex-1 text-left">{option.label}</span>
+                  {isSelected && (
+                    <Check className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+          </PopoverContent>
+        </Popover>
 
         {/* Search */}
         <div className="relative flex-1 min-w-[200px]">
@@ -536,13 +860,36 @@ export default function MemoriesPage() {
         <div className="columns-1 sm:columns-2 gap-4">
           {displayMemories.map((memory) => (
             <div key={memory.id} className="break-inside-avoid mb-4">
-              <MemoryCard
-                memory={memory}
-                onRemoveTag={handleRemoveTag}
-                onExpand={handleExpand}
-                onEdit={handleEdit}
-                formatDate={formatDate}
-              />
+              {memory.type === "voice_memo" || memory.type === "voice" ? (
+                <VoiceMemoCard
+                  memory={memory as Memory & { type: "voice_memo" | "voice" }}
+                  onRemoveTag={handleRemoveTag}
+                  onExpand={handleExpand}
+                  formatDate={formatDate}
+                />
+              ) : memory.type === "audio" ? (
+                <AudioCard
+                  memory={memory as Memory & { type: "audio" }}
+                  onRemoveTag={handleRemoveTag}
+                  onExpand={handleExpand}
+                  formatDate={formatDate}
+                />
+              ) : memory.type === "video" ? (
+                <VideoCard
+                  memory={memory as Memory & { type: "video" }}
+                  onRemoveTag={handleRemoveTag}
+                  onExpand={handleExpand}
+                  formatDate={formatDate}
+                />
+              ) : (
+                <MemoryCard
+                  memory={memory as Memory & { type: "web" | "note" }}
+                  onRemoveTag={handleRemoveTag}
+                  onExpand={handleExpand}
+                  onEdit={handleEdit}
+                  formatDate={formatDate}
+                />
+              )}
             </div>
           ))}
         </div>

@@ -40,3 +40,6 @@ extension/extension.pem
 
 # Compiled native messaging stub
 backend/native_host/think-native-stub
+
+# FFmpeg (downloaded on first use, cached locally)
+app/public/ffmpeg/

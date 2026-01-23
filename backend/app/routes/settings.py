@@ -610,3 +610,58 @@ async def get_embedding_model_impact() -> EmbeddingModelImpact:
         affected_count=affected_count,
         current_model=current_model,
     )
+
+
+# Transcription (Whisper) settings
+
+class TranscriptionSettings(BaseModel):
+    whisper_model: str
+
+
+class TranscriptionModelInfo(BaseModel):
+    name: str
+    description: str
+    size_mb: int
+
+
+# Whisper model options with descriptions
+WHISPER_MODEL_INFO = [
+    {"name": "tiny", "description": "Fastest, least accurate", "size_mb": 75},
+    {"name": "base", "description": "Good balance of speed and accuracy (recommended)", "size_mb": 145},
+    {"name": "small", "description": "More accurate, slower", "size_mb": 465},
+    {"name": "medium", "description": "Most accurate, slowest", "size_mb": 1500},
+]
+
+
+@router.get("/settings/transcription")
+async def get_transcription_settings() -> TranscriptionSettings:
+    """Get current transcription settings."""
+    from ..services.transcription import get_whisper_model_setting
+
+    whisper_model = await get_whisper_model_setting()
+    return TranscriptionSettings(whisper_model=whisper_model)
+
+
+@router.post("/settings/transcription")
+async def update_transcription_settings(settings: TranscriptionSettings):
+    """Update transcription settings."""
+    from ..services.transcription import WHISPER_MODELS, unload_whisper_model
+
+    if settings.whisper_model not in WHISPER_MODELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid model. Choose from: {', '.join(WHISPER_MODELS)}"
+        )
+
+    await set_setting("whisper_model", settings.whisper_model)
+
+    # Unload the current model so it will be reloaded with new settings
+    unload_whisper_model()
+
+    return {"success": True, "whisper_model": settings.whisper_model}
+
+
+@router.get("/settings/transcription-models")
+async def get_transcription_models() -> list[TranscriptionModelInfo]:
+    """Get available Whisper models with descriptions."""
+    return [TranscriptionModelInfo(**m) for m in WHISPER_MODEL_INFO]

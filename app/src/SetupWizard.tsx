@@ -9,30 +9,6 @@ interface Props {
   onComplete: () => void;
 }
 
-declare global {
-  interface Window {
-    electronAPI?: {
-      checkOllama: () => Promise<{ installed: boolean; running: boolean }>;
-      downloadOllama: () => Promise<{ success: boolean; error?: string }>;
-      pullModel: (model: string) => Promise<{ success: boolean; error?: string }>;
-      onOllamaDownloadProgress: (callback: (data: { progress: number; stage: string }) => void) => void;
-      onModelPullProgress: (callback: (data: { progress?: number; status: string }) => void) => void;
-      removeOllamaDownloadProgress: () => void;
-      removeModelPullProgress: () => void;
-      // Backend status handlers
-      onBackendReady: (callback: (data?: { token?: string }) => void) => void;
-      onBackendError: (callback: (data: { message: string }) => void) => void;
-      removeBackendListeners: () => void;
-      // App token for API authentication
-      getAppToken: () => string | null;
-      // Auto-update handlers
-      onUpdateDownloaded: (callback: (version: string) => void) => void;
-      removeUpdateListeners: () => void;
-      installUpdate: () => Promise<void>;
-    };
-  }
-}
-
 function WizardLayout({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
     <div className="relative flex items-center justify-center min-h-screen bg-background p-4">

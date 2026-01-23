@@ -6,6 +6,8 @@ const path = require('path');
 const fs = require('fs');
 const https = require('https');
 const { installNativeHost } = require('./install-native-host');
+const { createTray, destroyTray, closeRecordingWindow } = require('./tray');
+const videoProcessor = require('./video-processor');
 
 /**
  * Download a file with progress reporting.
@@ -295,7 +297,7 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
     }
   });
 
@@ -357,6 +359,10 @@ app.whenReady().then(async () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('backend-ready', { token: APP_TOKEN });
     }
+
+    // Initialize system tray after backend is ready
+    const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+    createTray(mainWindow, APP_TOKEN, isDev);
   } catch (err) {
     console.error('Backend startup failed:', err);
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -374,6 +380,8 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  closeRecordingWindow();
+  destroyTray();
   if (pythonProcess) {
     pythonProcess.kill();
   }
@@ -548,4 +556,86 @@ ipcMain.handle('pull-model', async (_event, modelName) => {
 
 ipcMain.handle('install-update', () => {
   autoUpdater.quitAndInstall();
+});
+
+// Open main window (called from recording popup when app is locked)
+ipcMain.handle('open-main-window', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    mainWindow.focus();
+  } else {
+    // No window exists - create one
+    createWindow();
+    if (backendReady && mainWindow) {
+      mainWindow.webContents.once('did-finish-load', () => {
+        mainWindow.webContents.send('backend-ready', { token: APP_TOKEN });
+      });
+    }
+  }
+});
+
+// Open recording window (called from renderer to start voice recording)
+ipcMain.handle('open-recording-window', () => {
+  const { openRecordingWindow } = require('./tray.js');
+  const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+  openRecordingWindow(mainWindow, APP_TOKEN, isDev);
+});
+
+// Video processing IPC handlers
+
+// Write video data to a temporary file for FFmpeg processing
+ipcMain.handle('write-temp-file', async (_event, data, filename) => {
+  try {
+    const buffer = Buffer.from(data);
+    const tempPath = await videoProcessor.writeTempFile(buffer, filename);
+    return { success: true, path: tempPath };
+  } catch (error) {
+    console.error('[IPC] write-temp-file error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Process video: extract audio and generate thumbnail
+ipcMain.handle('process-video', async (event, videoPath) => {
+  try {
+    const result = await videoProcessor.processVideo(videoPath, (progress) => {
+      // Send progress updates to renderer
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        event.sender.send('video-process-progress', progress);
+      }
+    });
+
+    // Read the audio and thumbnail files as buffers for upload
+    const audioBuffer = await videoProcessor.readFile(result.audioPath);
+    let thumbnailBuffer = null;
+    if (result.thumbnailPath) {
+      thumbnailBuffer = await videoProcessor.readFile(result.thumbnailPath);
+    }
+
+    // Clean up temp files (audio and thumbnail)
+    await videoProcessor.deleteTempFile(result.audioPath);
+    if (result.thumbnailPath) {
+      await videoProcessor.deleteTempFile(result.thumbnailPath);
+    }
+
+    return {
+      success: true,
+      audio: audioBuffer,
+      thumbnail: thumbnailBuffer,
+    };
+  } catch (error) {
+    console.error('[IPC] process-video error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Delete a temporary file
+ipcMain.handle('delete-temp-file', async (_event, filePath) => {
+  try {
+    await videoProcessor.deleteTempFile(filePath);
+    return { success: true };
+  } catch (error) {
+    console.error('[IPC] delete-temp-file error:', error);
+    return { success: false, error: error.message };
+  }
 });

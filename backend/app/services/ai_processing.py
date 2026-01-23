@@ -5,12 +5,15 @@ import logging
 
 from .ai import get_client, get_model
 from .embeddings import get_embedding, get_current_embedding_model
+from .transcription import transcribe_audio
 from ..db.crud import (
     get_memory,
     update_memory_summary,
     update_memory_embedding_summary,
     update_memory_title,
     update_memory_embedding,
+    update_memory_transcript,
+    update_transcription_status,
     add_tags_to_memory,
     get_all_tags,
     update_conversation_title,
@@ -350,3 +353,195 @@ async def process_conversation_title_async(conversation_id: int, message: str) -
 
     except Exception as e:
         logger.error(f"Failed to process conversation title {conversation_id}: {e}")
+
+
+async def generate_voice_title(transcript: str) -> str:
+    """Generate a concise title from a voice transcript."""
+    client = await get_client()
+    model = get_model()
+
+    prompt = f"""Generate a concise, descriptive title for this voice note transcript.
+
+Transcript: {transcript[:1000]}
+
+Requirements:
+- 5-10 words maximum
+- Capture the main topic or key point
+- Be informative and scannable
+
+Title:"""
+
+    try:
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that creates concise, descriptive titles for voice notes. Respond with only the title, no quotes or extra formatting."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=50,
+        )
+        title = response.choices[0].message.content.strip() if response.choices[0].message.content else ""
+        # Remove quotes if the model wrapped the title
+        if title.startswith('"') and title.endswith('"'):
+            title = title[1:-1]
+        return title
+    except Exception as e:
+        logger.error(f"Failed to generate voice title: {e}")
+        return ""
+
+
+async def process_voice_memory_async(memory_id: int) -> None:
+    """Background task to process a media memory (voice memo or audio upload).
+
+    Pipeline:
+    1. Set status to "processing"
+    2. Transcribe audio via faster-whisper
+    3. Store transcript
+    4. Generate title from transcript
+    5. Generate summary, embedding_summary, tags
+    6. Create embedding from embedding_summary
+    7. Set status to "completed"
+    8. Emit MEMORY_UPDATED event
+    """
+    try:
+        # Get the memory
+        memory = await get_memory(memory_id)
+        if not memory:
+            logger.error(f"Media memory {memory_id} not found for processing")
+            return
+
+        memory_type = memory.get("type")
+        if memory_type not in ("voice_memo", "audio", "voice", "video"):
+            logger.error(f"Memory {memory_id} is not a media memory (type={memory_type})")
+            return
+
+        audio_path = memory.get("audio_path")
+        if not audio_path:
+            logger.error(f"Voice memory {memory_id} has no audio_path")
+            await update_transcription_status(memory_id, "failed")
+            await event_manager.publish(
+                MemoryEvent(
+                    type=EventType.MEMORY_UPDATED,
+                    memory_id=memory_id,
+                    data={"transcription_status": "failed"},
+                )
+            )
+            return
+
+        # 1. Set status to processing
+        await update_transcription_status(memory_id, "processing")
+
+        # Emit update event for processing status
+        await event_manager.publish(
+            MemoryEvent(
+                type=EventType.MEMORY_UPDATED,
+                memory_id=memory_id,
+                data={"transcription_status": "processing"},
+            )
+        )
+
+        # 2. Transcribe the audio
+        logger.info(f"Starting transcription for voice memory {memory_id}")
+        transcript, segments = await transcribe_audio(audio_path)
+
+        if not transcript or not transcript.strip():
+            logger.warning(f"Transcription produced no text for memory {memory_id}")
+            await update_transcription_status(memory_id, "failed")
+            await event_manager.publish(
+                MemoryEvent(
+                    type=EventType.MEMORY_UPDATED,
+                    memory_id=memory_id,
+                    data={"transcription_status": "failed"},
+                )
+            )
+            return
+
+        # 3. Store transcript and segments
+        await update_memory_transcript(memory_id, transcript, segments)
+        logger.info(
+            f"Stored transcript for voice memory {memory_id}: "
+            f"{len(transcript)} chars, {len(segments)} segments"
+        )
+
+        # Get existing tags for context
+        all_tags = await get_all_tags()
+        existing_tag_names = [t["name"] for t in all_tags]
+
+        # 4-5. Generate title, summary, embedding_summary, and tags in parallel
+        tasks = [
+            generate_voice_title(transcript),
+            generate_summary(transcript, ""),
+            generate_embedding_summary(transcript, ""),
+            generate_tags(transcript, "", existing_tag_names),
+        ]
+        results = await asyncio.gather(*tasks)
+
+        title = results[0]
+        summary = results[1]
+        embedding_summary = results[2]
+        tags = results[3]
+
+        updated = False
+
+        # Update title
+        if title:
+            await update_memory_title(memory_id, title)
+            logger.info(f"Updated voice memory {memory_id} title: '{title}'")
+            updated = True
+
+        # Update summary
+        if summary:
+            await update_memory_summary(memory_id, summary)
+            logger.info(f"Updated voice memory {memory_id} with summary")
+            updated = True
+
+        # Update embedding summary and create embedding
+        if embedding_summary:
+            await update_memory_embedding_summary(memory_id, embedding_summary)
+            logger.info(f"Updated voice memory {memory_id} with embedding summary")
+            updated = True
+
+            # 6. Create embedding from embedding_summary
+            try:
+                if embedding_summary.strip():
+                    embedding = await get_embedding(embedding_summary)
+                    embedding_model = get_current_embedding_model()
+                    await update_memory_embedding(memory_id, embedding, embedding_model)
+                    logger.info(f"Created embedding for voice memory {memory_id}")
+            except Exception as e:
+                logger.error(f"Failed to create embedding for voice memory {memory_id}: {e}")
+
+        # Add AI-generated tags
+        if tags:
+            await add_tags_to_memory(memory_id, tags, source="ai")
+            logger.info(f"Added {len(tags)} AI tags to voice memory {memory_id}: {tags}")
+            updated = True
+
+        # 7. Set status to completed
+        await update_transcription_status(memory_id, "completed")
+
+        # 8. Emit update event (always emit, even if AI generation failed)
+        updated_memory = await get_memory(memory_id)
+        await event_manager.publish(
+            MemoryEvent(
+                type=EventType.MEMORY_UPDATED,
+                memory_id=memory_id,
+                data=updated_memory,
+            )
+        )
+        logger.info(f"Emitted update event for voice memory {memory_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to process voice memory {memory_id}: {e}")
+        # Set status to failed and notify frontend
+        try:
+            await update_transcription_status(memory_id, "failed")
+            await event_manager.publish(
+                MemoryEvent(
+                    type=EventType.MEMORY_UPDATED,
+                    memory_id=memory_id,
+                    data={"transcription_status": "failed"},
+                )
+            )
+        except Exception:
+            pass

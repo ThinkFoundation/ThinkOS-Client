@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { HashRouter, Routes, Route } from "react-router-dom";
 import SetupWizard from "./SetupWizard";
 import LockScreen from "./LockScreen";
 import MainLayout from "./layouts/MainLayout";
@@ -7,8 +7,10 @@ import HomePage from "./pages/HomePage";
 import ChatPage from "./pages/ChatPage";
 import MemoriesPage from "./pages/MemoriesPage";
 import SettingsPage from "./pages/SettingsPage";
+import RecordingPage from "./pages/RecordingPage";
 import { NamePromptDialog } from "./components/NamePromptDialog";
 import { Button } from "@/components/ui/button";
+import { Lock } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { useSystemTheme } from "@/hooks/useSystemTheme";
@@ -112,11 +114,12 @@ function App() {
         const modelsRes = await apiFetch("/api/settings/models?provider=ollama");
         const modelsData = await modelsRes.json();
 
-        // Check if current_model exists in the available models list
+        // Check if current_model exists AND is downloaded
         const hasConfiguredModel = modelsData.models?.some(
-          (m: { name: string }) =>
-            m.name === modelsData.current_model ||
-            m.name.startsWith(modelsData.current_model + ":")
+          (m: { name: string; is_downloaded: boolean }) =>
+            m.is_downloaded &&
+            (m.name === modelsData.current_model ||
+              m.name.startsWith(modelsData.current_model + ":"))
         );
 
         if (!hasConfiguredModel) {
@@ -242,6 +245,25 @@ function App() {
   }
 
   if (appState === "locked") {
+    // Check if we're in the recording popup window
+    const isRecordingRoute = window.location.hash === '#/recording';
+
+    if (isRecordingRoute) {
+      // Compact message for the small recording popup
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen gap-3 p-4 text-center bg-background">
+          <Lock className="h-8 w-8 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Think is locked</p>
+          <Button
+            size="sm"
+            onClick={() => window.electronAPI?.openMainWindow?.()}
+          >
+            Unlock
+          </Button>
+        </div>
+      );
+    }
+
     return <LockScreen needsSetup={false} onUnlock={handleUnlock} />;
   }
 
@@ -251,8 +273,12 @@ function App() {
 
   return (
     <>
-      <MemoryRouter>
+      <HashRouter>
         <Routes>
+          {/* Recording popup - standalone window without layout */}
+          <Route path="/recording" element={<RecordingPage />} />
+
+          {/* Main app routes */}
           <Route element={<MainLayout />}>
             <Route path="/" element={<HomePage userName={userName} />} />
             <Route path="/memories" element={<MemoriesPage />} />
@@ -263,7 +289,7 @@ function App() {
             />
           </Route>
         </Routes>
-      </MemoryRouter>
+      </HashRouter>
 
       <NamePromptDialog
         open={showNameDialog}

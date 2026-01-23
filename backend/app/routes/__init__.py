@@ -6,6 +6,8 @@ from .chat import router as chat_router
 from .settings import router as settings_router
 from .conversations import router as conversations_router
 from .jobs import router as jobs_router
+from .media import router as media_router
+from .video import router as video_router
 
 router = APIRouter()
 router.include_router(auth_router)
@@ -14,3 +16,5 @@ router.include_router(chat_router)
 router.include_router(settings_router)
 router.include_router(conversations_router)
 router.include_router(jobs_router)
+router.include_router(media_router)
+router.include_router(video_router)

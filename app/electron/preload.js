@@ -46,4 +46,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('update-downloaded');
   },
   installUpdate: () => ipcRenderer.invoke('install-update'),
+  // Open main window (for recording popup to trigger unlock)
+  openMainWindow: () => ipcRenderer.invoke('open-main-window'),
+  // Open recording window (for voice memo from main app)
+  openRecordingWindow: () => ipcRenderer.invoke('open-recording-window'),
+  // Send recording state to main process (for blur handler)
+  setRecordingState: (isRecording) => ipcRenderer.send('recording-state-changed', isRecording),
+  // Video processing APIs (native FFmpeg)
+  writeTempFile: (data, filename) => ipcRenderer.invoke('write-temp-file', data, filename),
+  processVideo: (videoPath) => ipcRenderer.invoke('process-video', videoPath),
+  deleteTempFile: (path) => ipcRenderer.invoke('delete-temp-file', path),
+  onVideoProcessProgress: (callback) => {
+    ipcRenderer.on('video-process-progress', (_, data) => callback(data));
+  },
+  removeVideoProcessListeners: () => {
+    ipcRenderer.removeAllListeners('video-process-progress');
+  },
 });

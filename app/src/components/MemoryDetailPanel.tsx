@@ -7,6 +7,9 @@ import {
   X,
   Globe,
   FileText,
+  Mic,
+  FileAudio,
+  Video,
   Loader2,
   Pencil,
   Check,
@@ -17,11 +20,22 @@ import {
   Sparkles,
   Lightbulb,
   Network,
+  Play,
+  Pause,
+  ChevronDown,
+  ChevronUp,
+  RotateCcw,
+  Copy,
+  SkipBack,
+  SkipForward,
 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getAppToken } from "@/lib/api";
+import { API_BASE_URL } from "@/constants";
 import { useMemoryEvents } from "../hooks/useMemoryEvents";
 import { useConversation } from "../contexts/ConversationContext";
+import type { TranscriptionStatus, TranscriptSegment, VideoProcessingStatus } from "@/types/chat";
 
 interface MemoryTag {
   id: number;
@@ -31,13 +45,25 @@ interface MemoryTag {
 
 interface Memory {
   id: number;
-  type: "web" | "note";
+  type: "web" | "note" | "voice_memo" | "audio" | "video" | "voice"; // "voice" for backwards compat
   url: string | null;
   title: string;
   content?: string;
   summary: string | null;
   tags: MemoryTag[];
   created_at: string;
+  // Media-specific fields (voice memos and audio uploads)
+  audio_duration?: number;
+  transcript?: string;
+  transcription_status?: TranscriptionStatus;
+  transcript_segments?: TranscriptSegment[];
+  media_source?: "recording" | "upload";
+  // Video-specific fields
+  video_duration?: number;
+  video_width?: number;
+  video_height?: number;
+  thumbnail_path?: string;
+  video_processing_status?: VideoProcessingStatus;
 }
 
 interface Tag {
@@ -80,6 +106,30 @@ export function MemoryDetailPanel({
   const [tagSuggestions, setTagSuggestions] = useState<Tag[]>([]);
   const [showTagSuggestions, setShowTagSuggestions] = useState(false);
 
+  // Voice memory state
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isAudioLoading, setIsAudioLoading] = useState(false);
+  const [showFullTranscript, setShowFullTranscript] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [copiedTranscript, setCopiedTranscript] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
+
+  // Video player state
+  const [isVideoLoading, setIsVideoLoading] = useState(false);
+  const [videoCurrentTime, setVideoCurrentTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [videoPlaybackRate, setVideoPlaybackRate] = useState(1);
+  const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [videoThumbnailUrl, setVideoThumbnailUrl] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoBlobUrlRef = useRef<string | null>(null);
+  const videoThumbnailUrlRef = useRef<string | null>(null);
+
   const titleInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { startNewChat, addAttachedMemory } = useConversation();
@@ -106,6 +156,64 @@ export function MemoryDetailPanel({
       fetchMemory(memoryId);
     }
   }, [memoryId, isOpen]);
+
+  // Fetch video thumbnail when memory has one
+  useEffect(() => {
+    if (!memory || memory.type !== "video" || !memory.thumbnail_path) {
+      return;
+    }
+
+    let isCancelled = false;
+    let blobUrl: string | null = null;
+
+    const fetchThumbnail = async () => {
+      try {
+        const token = getAppToken();
+        const response = await fetch(`${API_BASE_URL}/api/video/${memory.id}/thumbnail`, {
+          headers: token ? { "X-App-Token": token } : {},
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to load thumbnail");
+        }
+
+        const blob = await response.blob();
+
+        // Check if component was unmounted during fetch
+        if (isCancelled) {
+          return;
+        }
+
+        blobUrl = URL.createObjectURL(blob);
+
+        // Revoke previous URL if exists
+        if (videoThumbnailUrlRef.current) {
+          URL.revokeObjectURL(videoThumbnailUrlRef.current);
+        }
+
+        videoThumbnailUrlRef.current = blobUrl;
+        setVideoThumbnailUrl(blobUrl);
+      } catch (error) {
+        if (!isCancelled) {
+          console.error("Failed to load video thumbnail:", error);
+        }
+      }
+    };
+
+    fetchThumbnail();
+
+    return () => {
+      isCancelled = true;
+      // Revoke both the ref URL and any URL created during this effect
+      if (videoThumbnailUrlRef.current) {
+        URL.revokeObjectURL(videoThumbnailUrlRef.current);
+        videoThumbnailUrlRef.current = null;
+      }
+      if (blobUrl && blobUrl !== videoThumbnailUrlRef.current) {
+        URL.revokeObjectURL(blobUrl);
+      }
+    };
+  }, [memory?.id, memory?.type, memory?.thumbnail_path]);
 
   // Reset editing state when panel closes
   useEffect(() => {
@@ -327,6 +435,349 @@ export function MemoryDetailPanel({
     }
   };
 
+  // Voice/Audio memory functions
+  const handlePlayPause = async () => {
+    if (!memory || (memory.type !== "voice_memo" && memory.type !== "audio" && memory.type !== "voice")) return;
+
+    if (!audioRef.current) {
+      setIsAudioLoading(true);
+      let blobUrl: string | null = null;
+
+      try {
+        const token = getAppToken();
+        const response = await fetch(`${API_BASE_URL}/api/media/${memory.id}/stream`, {
+          headers: token ? { "X-App-Token": token } : {},
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to load audio");
+        }
+
+        const blob = await response.blob();
+        blobUrl = URL.createObjectURL(blob);
+
+        const audio = new Audio();
+        blobUrlRef.current = blobUrl;
+        audio.src = blobUrl;
+        audio.onended = () => setIsPlaying(false);
+        audio.oncanplay = () => {
+          setIsAudioLoading(false);
+          setDuration(audio.duration);
+        };
+        audio.ontimeupdate = () => setCurrentTime(audio.currentTime);
+        audio.onloadedmetadata = () => setDuration(audio.duration);
+        audioRef.current = audio;
+      } catch (error) {
+        console.error("Failed to load audio:", error);
+        // Clean up blob URL if it was created but setup failed
+        if (blobUrl && !blobUrlRef.current) {
+          URL.revokeObjectURL(blobUrl);
+        }
+        setIsAudioLoading(false);
+        return;
+      }
+    }
+
+    if (isPlaying) {
+      audioRef.current?.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current?.play();
+      setIsPlaying(true);
+    }
+  };
+
+  // Video playback functions
+  const handleVideoPlayPause = async () => {
+    if (!memory || memory.type !== "video") return;
+
+    // If video not loaded yet, fetch it
+    if (!videoSrc) {
+      setIsVideoLoading(true);
+      let blobUrl: string | null = null;
+
+      try {
+        const token = getAppToken();
+        const response = await fetch(`${API_BASE_URL}/api/video/${memory.id}/stream`, {
+          headers: token ? { "X-App-Token": token } : {},
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to load video");
+        }
+
+        const blob = await response.blob();
+        blobUrl = URL.createObjectURL(blob);
+        videoBlobUrlRef.current = blobUrl;
+        setVideoSrc(blobUrl);
+        setIsVideoLoading(false);
+        // Video will auto-play when loaded via onCanPlay handler
+        return;
+      } catch (error) {
+        console.error("Failed to load video:", error);
+        // Clean up blob URL if it was created but setup failed
+        if (blobUrl && !videoBlobUrlRef.current) {
+          URL.revokeObjectURL(blobUrl);
+        }
+        setIsVideoLoading(false);
+        return;
+      }
+    }
+
+    // Toggle play/pause
+    if (isVideoPlaying) {
+      videoRef.current?.pause();
+      setIsVideoPlaying(false);
+    } else {
+      videoRef.current?.play();
+      setIsVideoPlaying(true);
+    }
+  };
+
+  const handleVideoSkip = (seconds: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.max(
+        0,
+        Math.min(videoRef.current.currentTime + seconds, videoRef.current.duration)
+      );
+    }
+  };
+
+  const handleVideoSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!videoRef.current || !videoDuration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const percent = (e.clientX - rect.left) / rect.width;
+    videoRef.current.currentTime = percent * videoDuration;
+  };
+
+  const handleVideoPlaybackRateChange = () => {
+    const rates = [1, 1.25, 1.5, 1.75, 2];
+    const currentIndex = rates.indexOf(videoPlaybackRate);
+    const nextRate = rates[(currentIndex + 1) % rates.length];
+    setVideoPlaybackRate(nextRate);
+    if (videoRef.current) {
+      videoRef.current.playbackRate = nextRate;
+    }
+  };
+
+  const handleVideoSeekToTime = async (time: number) => {
+    if (!memory || memory.type !== "video") return;
+
+    if (!videoRef.current) {
+      setIsVideoLoading(true);
+      const video = document.createElement("video");
+
+      const token = getAppToken();
+      const response = await fetch(`${API_BASE_URL}/api/video/${memory.id}/stream`, {
+        headers: token ? { "X-App-Token": token } : {},
+      });
+
+      if (!response.ok) {
+        console.error("Failed to load video");
+        setIsVideoLoading(false);
+        return;
+      }
+
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      videoBlobUrlRef.current = blobUrl;
+      video.src = blobUrl;
+      video.onended = () => setIsVideoPlaying(false);
+      video.oncanplay = () => {
+        setIsVideoLoading(false);
+        setVideoDuration(video.duration);
+        video.currentTime = time;
+        video.play();
+        setIsVideoPlaying(true);
+      };
+      video.ontimeupdate = () => setVideoCurrentTime(video.currentTime);
+      video.onloadedmetadata = () => setVideoDuration(video.duration);
+      videoRef.current = video;
+    } else {
+      videoRef.current.currentTime = time;
+      if (!isVideoPlaying) {
+        videoRef.current.play();
+        setIsVideoPlaying(true);
+      }
+    }
+  };
+
+  const handleSkip = (seconds: number) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = Math.max(
+        0,
+        Math.min(audioRef.current.currentTime + seconds, audioRef.current.duration)
+      );
+    }
+  };
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!audioRef.current || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const percent = (e.clientX - rect.left) / rect.width;
+    audioRef.current.currentTime = percent * duration;
+  };
+
+  const handlePlaybackRateChange = () => {
+    const rates = [1, 1.25, 1.5, 1.75, 2];
+    const currentIndex = rates.indexOf(playbackRate);
+    const nextRate = rates[(currentIndex + 1) % rates.length];
+    setPlaybackRate(nextRate);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = nextRate;
+    }
+  };
+
+  const handleCopyTranscript = async () => {
+    if (!memory?.transcript) return;
+    try {
+      await navigator.clipboard.writeText(memory.transcript);
+      setCopiedTranscript(true);
+      toast.success("Transcript copied to clipboard");
+      setTimeout(() => setCopiedTranscript(false), 2000);
+    } catch {
+      toast.error("Failed to copy transcript");
+    }
+  };
+
+  const handleSeekToTime = async (time: number) => {
+    // For video type, use video seek
+    if (memory?.type === "video") {
+      handleVideoSeekToTime(time);
+      return;
+    }
+
+    // Initialize audio if not already loaded
+    if (!audioRef.current && (memory?.type === "voice_memo" || memory?.type === "audio" || memory?.type === "voice")) {
+      setIsAudioLoading(true);
+      const audio = new Audio();
+
+      const token = getAppToken();
+      const response = await fetch(
+        `${API_BASE_URL}/api/media/${memory.id}/stream`,
+        {
+          headers: token ? { "X-App-Token": token } : {},
+        }
+      );
+
+      if (!response.ok) {
+        console.error("Failed to load audio");
+        setIsAudioLoading(false);
+        return;
+      }
+
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      blobUrlRef.current = blobUrl;
+      audio.src = blobUrl;
+      audio.onended = () => setIsPlaying(false);
+      audio.oncanplay = () => {
+        setIsAudioLoading(false);
+        setDuration(audio.duration);
+        // Seek after audio is ready
+        audio.currentTime = time;
+        audio.play();
+        setIsPlaying(true);
+      };
+      audio.ontimeupdate = () => setCurrentTime(audio.currentTime);
+      audio.onloadedmetadata = () => setDuration(audio.duration);
+      audioRef.current = audio;
+    } else if (audioRef.current) {
+      audioRef.current.currentTime = time;
+      if (!isPlaying) {
+        audioRef.current.play();
+        setIsPlaying(true);
+      }
+    }
+  };
+
+  const handleRetryTranscription = async () => {
+    if (!memory || (memory.type !== "voice_memo" && memory.type !== "audio" && memory.type !== "voice" && memory.type !== "video")) return;
+    setIsRetrying(true);
+
+    try {
+      // Use video endpoint for video type
+      const endpoint = memory.type === "video"
+        ? `/api/video/${memory.id}/retry`
+        : `/api/media/${memory.id}/retry`;
+
+      const res = await apiFetch(endpoint, {
+        method: "POST",
+      });
+
+      if (res.ok) {
+        setMemory((prev) =>
+          prev ? { ...prev, transcription_status: "pending" } : null
+        );
+      }
+    } catch (err) {
+      console.error("Failed to retry transcription:", err);
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
+  const formatDuration = (seconds: number | undefined): string => {
+    if (seconds === undefined || seconds === null || !isFinite(seconds)) return "0:00";
+    const totalSeconds = Math.floor(seconds);
+    const minutes = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${minutes}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  // Reset audio/video player when memory changes and cleanup blob URLs
+  useEffect(() => {
+    // Audio cleanup
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setPlaybackRate(1);
+    setShowFullTranscript(false);
+
+    // Video cleanup
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current = null;
+    }
+    if (videoBlobUrlRef.current) {
+      URL.revokeObjectURL(videoBlobUrlRef.current);
+      videoBlobUrlRef.current = null;
+    }
+    if (videoThumbnailUrlRef.current) {
+      URL.revokeObjectURL(videoThumbnailUrlRef.current);
+      videoThumbnailUrlRef.current = null;
+    }
+    setVideoSrc(null);
+    setVideoThumbnailUrl(null);
+    setIsVideoPlaying(false);
+    setVideoCurrentTime(0);
+    setVideoDuration(0);
+    setVideoPlaybackRate(1);
+  }, [memoryId]);
+
+  // Cleanup blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+      }
+      if (videoBlobUrlRef.current) {
+        URL.revokeObjectURL(videoBlobUrlRef.current);
+      }
+      if (videoThumbnailUrlRef.current) {
+        URL.revokeObjectURL(videoThumbnailUrlRef.current);
+      }
+    };
+  }, []);
+
   if (!isOpen) return null;
 
   return createPortal(
@@ -383,11 +834,17 @@ export function MemoryDetailPanel({
                 <div className="flex items-center gap-2 text-muted-foreground">
                   {memory.type === "web" ? (
                     <Globe className="h-4 w-4" />
+                  ) : memory.type === "voice_memo" || memory.type === "voice" ? (
+                    <Mic className="h-4 w-4 text-orange-600" />
+                  ) : memory.type === "audio" ? (
+                    <FileAudio className="h-4 w-4 text-blue-600" />
+                  ) : memory.type === "video" ? (
+                    <Video className="h-4 w-4 text-purple-600" />
                   ) : (
                     <FileText className="h-4 w-4 text-amber-600" />
                   )}
-                  <span className="text-sm capitalize">{memory.type}</span>
-                  {!isEditing && (
+                  <span className="text-sm capitalize">{memory.type === "voice_memo" ? "Voice Memo" : memory.type === "audio" ? "Audio" : memory.type === "voice" ? "Voice Memo" : memory.type === "video" ? "Video" : memory.type}</span>
+                  {!isEditing && memory.type !== "voice_memo" && memory.type !== "audio" && memory.type !== "voice" && memory.type !== "video" && (
                     <Button
                       variant="ghost"
                       size="icon"
@@ -475,6 +932,455 @@ export function MemoryDetailPanel({
                   {formatDate(memory.created_at)}
                 </p>
               </div>
+
+              {/* Voice Memory: Enhanced Audio Player */}
+              {(memory.type === "voice_memo" || memory.type === "audio" || memory.type === "voice") && (
+                <div className="space-y-3">
+                  <div className="p-4 rounded-xl bg-slate-100/50 dark:bg-white/5 space-y-3">
+                    {/* Controls Row */}
+                    <div className="flex items-center justify-center gap-2">
+                      {/* Skip Back */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleSkip(-10)}
+                        disabled={isAudioLoading || !audioRef.current}
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        title="Back 10 seconds"
+                      >
+                        <SkipBack className="h-4 w-4" />
+                      </Button>
+
+                      {/* Play/Pause */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={handlePlayPause}
+                        disabled={isAudioLoading || memory.transcription_status === "processing"}
+                        className={cn(
+                          "h-12 w-12 rounded-full",
+                          memory.type === "audio"
+                            ? "bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-600"
+                            : "bg-orange-100 hover:bg-orange-200 dark:bg-orange-900/30 dark:hover:bg-orange-900/50 text-orange-600"
+                        )}
+                      >
+                        {isAudioLoading ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : isPlaying ? (
+                          <Pause className="h-5 w-5" />
+                        ) : (
+                          <Play className="h-5 w-5 ml-0.5" />
+                        )}
+                      </Button>
+
+                      {/* Skip Forward */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleSkip(10)}
+                        disabled={isAudioLoading || !audioRef.current}
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        title="Forward 10 seconds"
+                      >
+                        <SkipForward className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div
+                      className="relative h-1.5 bg-slate-200 dark:bg-white/10 rounded-full cursor-pointer group"
+                      onClick={handleSeek}
+                    >
+                      <div
+                        className="absolute h-full bg-purple-500 rounded-full transition-all"
+                        style={{
+                          width: `${duration ? (currentTime / duration) * 100 : 0}%`,
+                        }}
+                      />
+                      <div
+                        className="absolute h-3 w-3 bg-purple-600 rounded-full -top-[3px] opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
+                        style={{
+                          left: `calc(${duration ? (currentTime / duration) * 100 : 0}% - 6px)`,
+                        }}
+                      />
+                    </div>
+
+                    {/* Time Display & Playback Speed */}
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>
+                        {formatDuration(currentTime)} /{" "}
+                        {formatDuration(
+                          duration ||
+                            memory.audio_duration ||
+                            (memory.transcript_segments?.length
+                              ? memory.transcript_segments[
+                                  memory.transcript_segments.length - 1
+                                ].end
+                              : 0)
+                        )}
+                      </span>
+                      <button
+                        onClick={handlePlaybackRateChange}
+                        className="px-2 py-0.5 rounded bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 transition-colors font-medium"
+                      >
+                        {playbackRate}x
+                      </button>
+                    </div>
+
+                    {/* Transcription Status */}
+                    {memory.transcription_status &&
+                      memory.transcription_status !== "completed" &&
+                      (memory.transcription_status === "failed" || !memory.transcript) && (
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] rounded-full font-medium",
+                              memory.transcription_status === "pending" && "bg-muted text-muted-foreground",
+                              memory.transcription_status === "processing" && "bg-muted text-muted-foreground",
+                              memory.transcription_status === "failed" &&
+                                "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                            )}
+                          >
+                            {memory.transcription_status === "processing" && (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            )}
+                            {memory.transcription_status === "pending"
+                              ? "Pending"
+                              : memory.transcription_status === "processing"
+                                ? "Transcribing..."
+                                : "Failed"}
+                          </span>
+                          {memory.transcription_status === "failed" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleRetryTranscription}
+                              disabled={isRetrying}
+                            >
+                              {isRetrying ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <RotateCcw className="h-4 w-4" />
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                  </div>
+                </div>
+              )}
+
+              {/* Video Player */}
+              {memory.type === "video" && (
+                <div className="space-y-3">
+                  <div className="p-4 rounded-xl bg-slate-100/50 dark:bg-white/5 space-y-3">
+                    {/* Video Processing Status */}
+                    {memory.video_processing_status && memory.video_processing_status !== "ready" && (
+                      <div className="flex items-center justify-center p-4">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-full font-medium",
+                            memory.video_processing_status === "pending_extraction" &&
+                              "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+                            memory.video_processing_status === "extracting" &&
+                              "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+                            memory.video_processing_status === "failed" &&
+                              "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                          )}
+                        >
+                          {(memory.video_processing_status === "pending_extraction" || memory.video_processing_status === "extracting") && (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          )}
+                          {memory.video_processing_status === "pending_extraction"
+                            ? "Processing video..."
+                            : memory.video_processing_status === "extracting"
+                              ? "Extracting audio..."
+                              : "Processing failed"}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Video Controls (only when ready) */}
+                    {memory.video_processing_status === "ready" && (
+                      <>
+                        {/* Video/Thumbnail Display */}
+                        <div className="relative aspect-video rounded-lg overflow-hidden bg-black">
+                          {videoSrc ? (
+                            /* Loaded video */
+                            <video
+                              ref={videoRef}
+                              src={videoSrc}
+                              className="w-full h-full object-contain"
+                              onTimeUpdate={(e) => setVideoCurrentTime(e.currentTarget.currentTime)}
+                              onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
+                              onEnded={() => setIsVideoPlaying(false)}
+                              onCanPlay={() => {
+                                // Auto-play when first loaded
+                                if (!isVideoPlaying && videoRef.current) {
+                                  videoRef.current.play();
+                                  setIsVideoPlaying(true);
+                                }
+                              }}
+                            />
+                          ) : (
+                            /* Thumbnail preview with play button */
+                            <>
+                              {videoThumbnailUrl ? (
+                                <img
+                                  src={videoThumbnailUrl}
+                                  alt={memory.title || "Video thumbnail"}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-slate-800">
+                                  <Video className="h-16 w-16 text-slate-600" />
+                                </div>
+                              )}
+                              {/* Play button overlay */}
+                              <button
+                                onClick={handleVideoPlayPause}
+                                disabled={isVideoLoading}
+                                className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors"
+                              >
+                                {isVideoLoading ? (
+                                  <Loader2 className="h-16 w-16 text-white animate-spin" />
+                                ) : (
+                                  <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+                                    <Play className="h-8 w-8 text-slate-900 ml-1" />
+                                  </div>
+                                )}
+                              </button>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Controls (only show after video loaded) */}
+                        {videoSrc && (
+                          <>
+                            {/* Controls Row */}
+                            <div className="flex items-center justify-center gap-2">
+                              {/* Skip Back */}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleVideoSkip(-10)}
+                                disabled={isVideoLoading || !videoRef.current}
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                title="Back 10 seconds"
+                              >
+                                <SkipBack className="h-4 w-4" />
+                              </Button>
+
+                              {/* Play/Pause */}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={handleVideoPlayPause}
+                                disabled={isVideoLoading}
+                                className="h-12 w-12 rounded-full bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/30 dark:hover:bg-purple-900/50 text-purple-600"
+                              >
+                                {isVideoLoading ? (
+                                  <Loader2 className="h-5 w-5 animate-spin" />
+                                ) : isVideoPlaying ? (
+                                  <Pause className="h-5 w-5" />
+                                ) : (
+                                  <Play className="h-5 w-5 ml-0.5" />
+                                )}
+                              </Button>
+
+                              {/* Skip Forward */}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleVideoSkip(10)}
+                                disabled={isVideoLoading || !videoRef.current}
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                title="Forward 10 seconds"
+                              >
+                                <SkipForward className="h-4 w-4" />
+                              </Button>
+                            </div>
+
+                            {/* Progress Bar */}
+                            <div
+                              className="relative h-1.5 bg-slate-200 dark:bg-white/10 rounded-full cursor-pointer group"
+                              onClick={handleVideoSeek}
+                            >
+                              <div
+                                className="absolute h-full bg-purple-500 rounded-full transition-all"
+                                style={{
+                                  width: `${videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0}%`,
+                                }}
+                              />
+                              <div
+                                className="absolute h-3 w-3 bg-purple-600 rounded-full -top-[3px] opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
+                                style={{
+                                  left: `calc(${videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0}% - 6px)`,
+                                }}
+                              />
+                            </div>
+
+                            {/* Time Display & Playback Speed */}
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <span>
+                                {formatDuration(videoCurrentTime)} / {formatDuration(videoDuration || memory.video_duration || 0)}
+                              </span>
+                              <button
+                                onClick={handleVideoPlaybackRateChange}
+                                className="px-2 py-0.5 rounded bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 transition-colors font-medium"
+                              >
+                                {videoPlaybackRate}x
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </>
+                    )}
+
+                    {/* Transcription Status */}
+                    {memory.video_processing_status === "ready" && memory.transcription_status && memory.transcription_status !== "completed" && (memory.transcription_status === "failed" || !memory.transcript) && (
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] rounded-full font-medium",
+                            memory.transcription_status === "pending" && "bg-muted text-muted-foreground",
+                            memory.transcription_status === "processing" && "bg-muted text-muted-foreground",
+                            memory.transcription_status === "failed" &&
+                              "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                          )}
+                        >
+                          {memory.transcription_status === "processing" && (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          )}
+                          {memory.transcription_status === "pending"
+                            ? "Pending"
+                            : memory.transcription_status === "processing"
+                              ? "Transcribing..."
+                              : "Failed"}
+                        </span>
+                        {memory.transcription_status === "failed" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleRetryTranscription}
+                            disabled={isRetrying}
+                          >
+                            {isRetrying ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <RotateCcw className="h-4 w-4" />
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Transcript Section (for audio and video types) */}
+              {(memory.type === "voice_memo" || memory.type === "audio" || memory.type === "voice" || memory.type === "video") && memory.transcript && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <button
+                      className="flex items-center gap-2"
+                      onClick={() => setShowFullTranscript(!showFullTranscript)}
+                    >
+                      <span className="text-sm font-medium">Transcript</span>
+                      {showFullTranscript ? (
+                        <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleCopyTranscript}
+                      className="h-7 w-7"
+                      title="Copy transcript"
+                    >
+                      {copiedTranscript ? (
+                        <Check className="h-3.5 w-3.5 text-green-500" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
+                  </div>
+                  {memory.transcript_segments &&
+                  memory.transcript_segments.length > 0 ? (
+                    // Transcript with timestamps - show in both collapsed/expanded
+                    <div
+                      className={cn(
+                        "relative text-sm p-3 rounded-lg bg-slate-50 dark:bg-white/5",
+                        showFullTranscript
+                          ? "max-h-[300px] overflow-y-auto"
+                          : "max-h-[5.5rem] overflow-hidden"
+                      )}
+                    >
+                      <div className="space-y-2">
+                        {memory.transcript_segments.map((segment, index) => {
+                          const playTime = memory.type === "video" ? videoCurrentTime : currentTime;
+                          const isActive =
+                            playTime >= segment.start &&
+                            playTime < segment.end;
+                          return (
+                            <div
+                              key={index}
+                              className="group flex gap-2 items-start"
+                            >
+                              <button
+                                onClick={() => handleSeekToTime(segment.start)}
+                                className={cn(
+                                  "flex-shrink-0 text-[11px] font-mono px-1.5 py-0.5 rounded",
+                                  "transition-colors",
+                                  isActive
+                                    ? "bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300"
+                                    : "text-muted-foreground hover:bg-purple-50 hover:text-purple-600 dark:hover:bg-purple-900/30 dark:hover:text-purple-400"
+                                )}
+                                title={`Jump to ${formatDuration(segment.start)}`}
+                              >
+                                {formatDuration(segment.start)}
+                              </button>
+                              <span
+                                className={cn(
+                                  "transition-colors",
+                                  isActive
+                                    ? "text-foreground"
+                                    : "text-muted-foreground"
+                                )}
+                              >
+                                {segment.text}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {/* Fade gradient when collapsed */}
+                      {!showFullTranscript && (
+                        <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-slate-50 dark:from-zinc-900 to-transparent rounded-b-lg pointer-events-none" />
+                      )}
+                    </div>
+                  ) : (
+                    // Fallback: plain text for memories without segments
+                    <div className="relative">
+                      <div
+                        className={cn(
+                          "text-sm text-muted-foreground leading-relaxed p-3 rounded-lg bg-slate-50 dark:bg-white/5",
+                          showFullTranscript
+                            ? "max-h-[300px] overflow-y-auto"
+                            : "line-clamp-3"
+                        )}
+                      >
+                        {memory.transcript}
+                      </div>
+                      {!showFullTranscript && (
+                        <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-slate-50 dark:from-zinc-900 to-transparent rounded-b-lg pointer-events-none" />
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Summary Section */}
               <div className="space-y-2">
