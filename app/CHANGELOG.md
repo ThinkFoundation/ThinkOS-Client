@@ -1,5 +1,30 @@
 # think-app
 
+## 0.6.0
+
+### Minor Changes
+
+- 16103f3: feat(app): add media memory support for voice memos, audio, and video
+
+  - Add voice memo recording from system tray and main app
+  - Add audio file upload with drag-and-drop support
+  - Add video file upload with FFmpeg audio extraction and thumbnail generation
+  - Add local AI transcription using faster-whisper with timestamp segments
+  - Add new memory card components for voice memos, audio, and video
+  - Add transcription settings for Whisper model selection
+  - Add file size limits and input validation for security
+
+### Patch Changes
+
+- c40f37b: feat(app): add toggle to enable/disable memory context in chat
+
+  - Add "Memory on/off" toggle inside chat input container
+  - Skip automatic RAG retrieval when toggle is off
+  - Attached memories still work when toggle is off
+  - Toggle defaults to on (current behavior preserved)
+
+- bb5ac91: Remove scale transform on memory card hover that caused text to appear blurry
+
 ## 0.5.5
 
 ### Patch Changes
