@@ -13,6 +13,11 @@ elif sys.platform == 'win32':
 else:
     sqlite_vec_ext = sqlite_vec_dir / 'vec0.so'
 
+# Find faster_whisper assets (VAD model for speech detection)
+import faster_whisper
+faster_whisper_dir = Path(faster_whisper.__file__).parent
+faster_whisper_assets = faster_whisper_dir / 'assets'
+
 # SQLCipher library - only needed on macOS/Linux
 # Note: rotki-pysqlcipher3 bundles SQLCipher statically on Windows
 sqlcipher_lib = None
@@ -32,11 +37,15 @@ if sqlcipher_lib and os.path.exists(sqlcipher_lib):
 if sqlite_vec_ext.exists():
     binaries.append((str(sqlite_vec_ext), 'sqlite_vec'))
 
+datas = []
+if faster_whisper_assets.exists():
+    datas.append((str(faster_whisper_assets), 'faster_whisper/assets'))
+
 a = Analysis(
     ['run.py'],
     pathex=[SPECPATH],
     binaries=binaries,
-    datas=[],
+    datas=datas,
     hiddenimports=[
         'app',
         'app.main',
