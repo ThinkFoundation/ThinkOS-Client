@@ -41,35 +41,8 @@ datas = []
 if faster_whisper_assets.exists():
     datas.append((str(faster_whisper_assets), 'faster_whisper/assets'))
 
-# Poppler binaries for PDF thumbnail generation
-# macOS: requires `brew install poppler`
-# Windows: download from https://github.com/osborn/poppler-windows/releases
-if sys.platform == 'darwin':
-    # macOS - bundle Homebrew Poppler
-    homebrew_prefix = '/opt/homebrew' if os.path.exists('/opt/homebrew') else '/usr/local'
-    poppler_bin = Path(homebrew_prefix) / 'opt' / 'poppler' / 'bin'
-    poppler_lib = Path(homebrew_prefix) / 'opt' / 'poppler' / 'lib'
-    lcms2_lib = Path(homebrew_prefix) / 'opt' / 'little-cms2' / 'lib'
-
-    # Bundle pdftoppm binary (used by pdf2image)
-    pdftoppm = poppler_bin / 'pdftoppm'
-    if pdftoppm.exists():
-        binaries.append((str(pdftoppm), 'poppler'))
-
-    # Bundle required dylibs
-    for lib_dir in [poppler_lib, lcms2_lib]:
-        if lib_dir.exists():
-            for dylib in lib_dir.glob('*.dylib'):
-                if dylib.is_file() and not dylib.is_symlink():
-                    binaries.append((str(dylib), 'poppler'))
-
-elif sys.platform == 'win32':
-    poppler_path = Path(SPECPATH) / 'poppler-windows' / 'Library' / 'bin'
-    if poppler_path.exists():
-        # Include all Poppler DLLs and executables
-        for file in poppler_path.glob('*'):
-            if file.is_file():
-                datas.append((str(file), 'poppler'))
+# Note: PDF thumbnail generation uses pypdfium2 which bundles PDFium binaries
+# No external Poppler dependencies needed
 
 a = Analysis(
     ['run.py'],
@@ -114,7 +87,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False if sys.platform == 'darwin' else True,  # UPX breaks code signing on macOS
-    upx_exclude=[],
+    upx_exclude=['pdfium.dll'],  # PDFium DLLs may have CFG enabled
     runtime_tmpdir=None,
     console=True,  # Set to False for production
     disable_windowed_traceback=False,
@@ -130,7 +103,7 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False if sys.platform == 'darwin' else True,  # UPX breaks code signing on macOS
-    upx_exclude=[],
+    upx_exclude=['pdfium.dll'],  # PDFium DLLs may have CFG enabled
     name='think-backend',
 )
 

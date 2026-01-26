@@ -1,11 +1,9 @@
 """PDF document utility functions."""
 import io
 import logging
-import os
-import sys
 
+import pypdfium2 as pdfium
 from pypdf import PdfReader
-from pdf2image import convert_from_bytes
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -17,21 +15,6 @@ SUPPORTED_FORMATS = {"pdf"}
 def validate_document_format(format: str) -> bool:
     """Check if the document format is supported."""
     return format.lower() in SUPPORTED_FORMATS
-
-
-def get_poppler_path() -> str | None:
-    """Get the path to bundled Poppler binaries.
-
-    Returns:
-        Path to Poppler bin directory when running from PyInstaller bundle,
-        or None to use system Poppler during development.
-    """
-    # When running from PyInstaller bundle
-    if getattr(sys, "frozen", False):
-        poppler_path = os.path.join(sys._MEIPASS, "poppler")
-        if os.path.exists(poppler_path):
-            return poppler_path
-    return None  # Use system poppler during development
 
 
 def extract_pdf_text(pdf_bytes: bytes) -> tuple[str, int]:
@@ -64,6 +47,8 @@ def extract_pdf_text(pdf_bytes: bytes) -> tuple[str, int]:
 def generate_pdf_thumbnail(pdf_bytes: bytes, max_size: int = 300) -> bytes:
     """Generate a thumbnail image from the first page of a PDF.
 
+    Uses pypdfium2 (PDFium) for rendering - no external dependencies required.
+
     Args:
         pdf_bytes: Raw PDF file bytes
         max_size: Maximum dimension (width or height) in pixels
@@ -72,19 +57,16 @@ def generate_pdf_thumbnail(pdf_bytes: bytes, max_size: int = 300) -> bytes:
         JPEG image bytes of the thumbnail
     """
     try:
-        # Convert first page to image using pdf2image (requires Poppler)
-        images = convert_from_bytes(
-            pdf_bytes,
-            first_page=1,
-            last_page=1,
-            dpi=72,  # Low DPI for thumbnails
-            poppler_path=get_poppler_path(),
-        )
+        # Open PDF with pypdfium2
+        pdf = pdfium.PdfDocument(pdf_bytes)
 
-        if not images:
+        if len(pdf) == 0:
             raise ValueError("PDF has no pages")
 
-        thumbnail = images[0]
+        # Render first page at scale 1 (72 DPI equivalent)
+        page = pdf[0]
+        bitmap = page.render(scale=1)
+        thumbnail = bitmap.to_pil()
 
         # Resize to fit max_size while maintaining aspect ratio
         thumbnail.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)

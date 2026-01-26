@@ -24,11 +24,11 @@ mutagen = "^1.47.0"
 cryptography = "^43.0.0"
 # Document memory support
 pypdf = "^5.0.0"       # BSD-3-Clause - PDF text extraction
-pdf2image = "^1.17.0"  # MIT - PDF thumbnail generation (requires Poppler)
 pillow = "^11.0.0"     # PIL-like license - image processing
 # Windows-only: pywin32 for native messaging stub
 pywin32 = {version = "^306", markers = "sys_platform == 'win32'"}
 python-multipart = "^0.0.21"
+pypdfium2 = "^5.3.0"
 
 [tool.poetry.group.dev.dependencies]
 pyinstaller = "^6.0.0"
