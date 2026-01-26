@@ -62,4 +62,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeVideoProcessListeners: () => {
     ipcRenderer.removeAllListeners('video-process-progress');
   },
+  // Document viewing
+  openDocumentWithSystem: (documentId, filename) => ipcRenderer.invoke('open-document-with-system', documentId, filename),
 });

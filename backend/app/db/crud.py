@@ -160,6 +160,13 @@ async def get_memories(
                         "transcription_status": m.transcription_status,
                         "media_source": m.media_source,
                     })
+                # Add document-specific fields
+                elif m.type == "document":
+                    memory_dict.update({
+                        "document_format": m.document_format,
+                        "document_page_count": m.document_page_count,
+                        "thumbnail_path": m.thumbnail_path,
+                    })
                 result.append(memory_dict)
 
             return result, total
@@ -232,6 +239,14 @@ async def get_memory(memory_id: int) -> dict | None:
                         if memory.transcript_segments
                         else None
                     ),
+                })
+            # Add document-specific fields
+            elif memory.type == "document":
+                result.update({
+                    "document_path": memory.document_path,
+                    "document_format": memory.document_format,
+                    "document_page_count": memory.document_page_count,
+                    "thumbnail_path": memory.thumbnail_path,
                 })
 
             return result
@@ -1302,6 +1317,136 @@ async def delete_video_memory(memory_id: int) -> dict | None:
             paths = {
                 "video_path": memory.video_path,
                 "audio_path": memory.audio_path,
+                "thumbnail_path": memory.thumbnail_path,
+            }
+            session.delete(memory)
+            session.commit()
+            return paths
+
+    return await run_sync(_delete)
+
+
+# Document memory functions
+
+async def create_document_memory(
+    title: str,
+    document_path: str,
+    document_format: str,
+    content: str | None = None,
+    document_page_count: int | None = None,
+    thumbnail_path: str | None = None,
+) -> dict:
+    """Create a new document memory record.
+
+    Args:
+        title: Document title (typically filename without extension)
+        document_path: Relative path to encrypted document file
+        document_format: Document format (e.g., "pdf")
+        content: Extracted text content from document
+        document_page_count: Number of pages in document
+        thumbnail_path: Relative path to encrypted thumbnail file
+
+    Returns:
+        Dict with memory info
+    """
+    def _create():
+        with get_session_maker()() as session:
+            memory = Memory(
+                type="document",
+                title=title,
+                document_path=document_path,
+                document_format=document_format,
+                content=content,
+                document_page_count=document_page_count,
+                thumbnail_path=thumbnail_path,
+            )
+            session.add(memory)
+            session.commit()
+            session.refresh(memory)
+            return {
+                "id": memory.id,
+                "type": memory.type,
+                "title": memory.title,
+                "document_path": memory.document_path,
+                "document_format": memory.document_format,
+                "document_page_count": memory.document_page_count,
+                "thumbnail_path": memory.thumbnail_path,
+                "content": memory.content,
+                "created_at": memory.created_at.isoformat(),
+            }
+
+    return await run_sync(_create)
+
+
+async def get_document_memory(memory_id: int) -> dict | None:
+    """Get a document memory with all details."""
+    def _get():
+        with get_session_maker()() as session:
+            memory = session.get(Memory, memory_id)
+            if not memory or memory.type != "document":
+                return None
+
+            # Get tags
+            memory_tags = session.execute(
+                select(MemoryTag, Tag)
+                .join(Tag, MemoryTag.tag_id == Tag.id)
+                .where(MemoryTag.memory_id == memory_id)
+            ).all()
+            tags = [
+                {"id": tag.id, "name": tag.name, "source": mt.source}
+                for mt, tag in memory_tags
+            ]
+
+            return {
+                "id": memory.id,
+                "type": memory.type,
+                "title": memory.title,
+                "content": memory.content,
+                "summary": memory.summary,
+                "document_path": memory.document_path,
+                "document_format": memory.document_format,
+                "document_page_count": memory.document_page_count,
+                "thumbnail_path": memory.thumbnail_path,
+                "tags": tags,
+                "created_at": memory.created_at.isoformat(),
+            }
+
+    return await run_sync(_get)
+
+
+async def update_document_thumbnail(memory_id: int, thumbnail_path: str) -> bool:
+    """Update the thumbnail path for a document memory.
+
+    Args:
+        memory_id: Memory ID
+        thumbnail_path: Relative path to encrypted thumbnail file
+    """
+    def _update():
+        with get_session_maker()() as session:
+            memory = session.get(Memory, memory_id)
+            if not memory or memory.type != "document":
+                return False
+            memory.thumbnail_path = thumbnail_path
+            session.commit()
+            return True
+
+    return await run_sync(_update)
+
+
+async def delete_document_memory(memory_id: int) -> dict | None:
+    """Delete a document memory and return paths for cleanup.
+
+    Returns:
+        Dict with document_path and thumbnail_path for file cleanup,
+        or None if not found
+    """
+    def _delete():
+        with get_session_maker()() as session:
+            memory = session.get(Memory, memory_id)
+            if not memory or memory.type != "document":
+                return None
+            paths = {
+                "document_path": memory.document_path,
                 "thumbnail_path": memory.thumbnail_path,
             }
             session.delete(memory)

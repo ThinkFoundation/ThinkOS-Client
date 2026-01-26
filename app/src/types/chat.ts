@@ -9,11 +9,11 @@ export interface SourceMemory {
 export interface AttachedMemory {
   id: number;
   title: string;
-  type: "web" | "note" | "voice_memo" | "audio" | "video" | "voice"; // "voice" for backwards compat
+  type: "web" | "note" | "voice_memo" | "audio" | "video" | "document" | "voice"; // "voice" for backwards compat
   url?: string;
 }
 
-export type MemoryType = "web" | "note" | "voice_memo" | "audio" | "video" | "voice"; // "voice" for backwards compat
+export type MemoryType = "web" | "note" | "voice_memo" | "audio" | "video" | "document" | "voice"; // "voice" for backwards compat
 
 export type MediaSource = "recording" | "upload";
 
@@ -44,6 +44,12 @@ export interface VideoMemoryFields extends MediaMemoryFields {
   video_height?: number;
   thumbnail_path?: string;
   video_processing_status?: VideoProcessingStatus;
+}
+
+export interface DocumentMemoryFields {
+  document_format?: string;
+  document_page_count?: number;
+  thumbnail_path?: string;
 }
 
 export interface TokenUsage {

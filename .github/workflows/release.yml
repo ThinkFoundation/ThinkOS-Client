@@ -125,8 +125,8 @@ jobs:
           virtualenvs-create: true
           virtualenvs-in-project: true
 
-      - name: Install SQLCipher
-        run: brew install sqlcipher
+      - name: Install SQLCipher and Poppler
+        run: brew install sqlcipher poppler
 
       - name: Install pnpm dependencies
         run: pnpm install --frozen-lockfile
@@ -239,6 +239,33 @@ jobs:
             Write-Host "Warning: sqlite_vec directory not found at $sqliteVecDir"
           }
         working-directory: backend
+
+      - name: Download Poppler for Windows
+        shell: pwsh
+        env:
+          POPPLER_VERSION: "24.08.0-0"
+        run: |
+          # Download Poppler binaries for PDF thumbnail generation
+          # From: https://github.com/oschwartz10612/poppler-windows/releases
+          $popplerUrl = "https://github.com/oschwartz10612/poppler-windows/releases/download/v$env:POPPLER_VERSION/Release-$env:POPPLER_VERSION.zip"
+          $archivePath = "$env:RUNNER_TEMP\poppler.zip"
+          $extractPath = "backend\poppler-windows"
+
+          Write-Host "Downloading Poppler..."
+          Invoke-WebRequest -Uri $popplerUrl -OutFile $archivePath
+
+          Write-Host "Extracting Poppler..."
+          Expand-Archive -Path $archivePath -DestinationPath $extractPath -Force
+
+          # The archive extracts to poppler-24.08.0, move contents up
+          $extractedDir = Get-ChildItem -Path $extractPath -Directory | Select-Object -First 1
+          if ($extractedDir) {
+            Get-ChildItem -Path $extractedDir.FullName | Move-Item -Destination $extractPath -Force
+            Remove-Item $extractedDir.FullName -Force
+          }
+
+          Write-Host "Poppler installed to $extractPath"
+          Get-ChildItem -Path "$extractPath\Library\bin" -ErrorAction SilentlyContinue | Select-Object -First 10 Name
 
       - name: Build backend
         run: pnpm build:backend

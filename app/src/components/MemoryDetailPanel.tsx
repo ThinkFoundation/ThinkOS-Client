@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
+import { Document, Page, pdfjs } from "react-pdf";
+import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -28,7 +31,17 @@ import {
   Copy,
   SkipBack,
   SkipForward,
+  ExternalLink,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
+
+// Set up PDF.js worker - served from public folder (dev) or copied to dist (build)
+// Use import.meta.url to resolve relative to the app base, works in both web and Electron
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  "/pdf.worker.min.mjs",
+  import.meta.url
+).href;
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { apiFetch, getAppToken } from "@/lib/api";
@@ -45,7 +58,7 @@ interface MemoryTag {
 
 interface Memory {
   id: number;
-  type: "web" | "note" | "voice_memo" | "audio" | "video" | "voice"; // "voice" for backwards compat
+  type: "web" | "note" | "voice_memo" | "audio" | "video" | "document" | "voice"; // "voice" for backwards compat
   url: string | null;
   title: string;
   content?: string;
@@ -64,6 +77,9 @@ interface Memory {
   video_height?: number;
   thumbnail_path?: string;
   video_processing_status?: VideoProcessingStatus;
+  // Document-specific fields
+  document_format?: string;
+  document_page_count?: number;
 }
 
 interface Tag {
@@ -129,6 +145,17 @@ export function MemoryDetailPanel({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const videoBlobUrlRef = useRef<string | null>(null);
   const videoThumbnailUrlRef = useRef<string | null>(null);
+
+  // Document viewer state
+  const [documentThumbnailUrl, setDocumentThumbnailUrl] = useState<string | null>(null);
+  const [showDocumentContent, setShowDocumentContent] = useState(false);
+  const documentThumbnailUrlRef = useRef<string | null>(null);
+  // PDF preview state
+  const [pdfData, setPdfData] = useState<string | null>(null);
+  const [pdfNumPages, setPdfNumPages] = useState(0);
+  const [pdfPageNumber, setPdfPageNumber] = useState(1);
+  const [isPdfLoading, setIsPdfLoading] = useState(false);
+  const pdfBlobUrlRef = useRef<string | null>(null);
 
   const titleInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
@@ -210,6 +237,64 @@ export function MemoryDetailPanel({
         videoThumbnailUrlRef.current = null;
       }
       if (blobUrl && blobUrl !== videoThumbnailUrlRef.current) {
+        URL.revokeObjectURL(blobUrl);
+      }
+    };
+  }, [memory?.id, memory?.type, memory?.thumbnail_path]);
+
+  // Fetch document thumbnail when memory has one
+  useEffect(() => {
+    if (!memory || memory.type !== "document" || !memory.thumbnail_path) {
+      return;
+    }
+
+    let isCancelled = false;
+    let blobUrl: string | null = null;
+
+    const fetchThumbnail = async () => {
+      try {
+        const token = getAppToken();
+        const response = await fetch(`${API_BASE_URL}/api/document/${memory.id}/thumbnail`, {
+          headers: token ? { "X-App-Token": token } : {},
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to load thumbnail");
+        }
+
+        const blob = await response.blob();
+
+        // Check if component was unmounted during fetch
+        if (isCancelled) {
+          return;
+        }
+
+        blobUrl = URL.createObjectURL(blob);
+
+        // Revoke previous URL if exists
+        if (documentThumbnailUrlRef.current) {
+          URL.revokeObjectURL(documentThumbnailUrlRef.current);
+        }
+
+        documentThumbnailUrlRef.current = blobUrl;
+        setDocumentThumbnailUrl(blobUrl);
+      } catch (error) {
+        if (!isCancelled) {
+          console.error("Failed to load document thumbnail:", error);
+        }
+      }
+    };
+
+    fetchThumbnail();
+
+    return () => {
+      isCancelled = true;
+      // Revoke both the ref URL and any URL created during this effect
+      if (documentThumbnailUrlRef.current) {
+        URL.revokeObjectURL(documentThumbnailUrlRef.current);
+        documentThumbnailUrlRef.current = null;
+      }
+      if (blobUrl && blobUrl !== documentThumbnailUrlRef.current) {
         URL.revokeObjectURL(blobUrl);
       }
     };
@@ -725,6 +810,33 @@ export function MemoryDetailPanel({
     return `${minutes}:${secs.toString().padStart(2, "0")}`;
   };
 
+  // Load PDF file for preview
+  const loadPdfFile = async (documentId: number) => {
+    if (isPdfLoading) return;
+    setIsPdfLoading(true);
+    try {
+      const token = getAppToken();
+      const response = await fetch(`${API_BASE_URL}/api/document/${documentId}/file`, {
+        headers: token ? { "X-App-Token": token } : {},
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to load PDF: ${response.status}`);
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      if (pdfBlobUrlRef.current) {
+        URL.revokeObjectURL(pdfBlobUrlRef.current);
+      }
+      pdfBlobUrlRef.current = url;
+      setPdfData(url);
+    } catch (error) {
+      console.error("Failed to load PDF:", error);
+      toast.error("Failed to load PDF");
+    } finally {
+      setIsPdfLoading(false);
+    }
+  };
+
   // Reset audio/video player when memory changes and cleanup blob URLs
   useEffect(() => {
     // Audio cleanup
@@ -761,6 +873,21 @@ export function MemoryDetailPanel({
     setVideoCurrentTime(0);
     setVideoDuration(0);
     setVideoPlaybackRate(1);
+
+    // Document cleanup
+    if (documentThumbnailUrlRef.current) {
+      URL.revokeObjectURL(documentThumbnailUrlRef.current);
+      documentThumbnailUrlRef.current = null;
+    }
+    if (pdfBlobUrlRef.current) {
+      URL.revokeObjectURL(pdfBlobUrlRef.current);
+      pdfBlobUrlRef.current = null;
+    }
+    setDocumentThumbnailUrl(null);
+    setShowDocumentContent(false);
+    setPdfData(null);
+    setPdfNumPages(0);
+    setPdfPageNumber(1);
   }, [memoryId]);
 
   // Cleanup blob URLs on unmount
@@ -774,6 +901,12 @@ export function MemoryDetailPanel({
       }
       if (videoThumbnailUrlRef.current) {
         URL.revokeObjectURL(videoThumbnailUrlRef.current);
+      }
+      if (documentThumbnailUrlRef.current) {
+        URL.revokeObjectURL(documentThumbnailUrlRef.current);
+      }
+      if (pdfBlobUrlRef.current) {
+        URL.revokeObjectURL(pdfBlobUrlRef.current);
       }
     };
   }, []);
@@ -840,11 +973,16 @@ export function MemoryDetailPanel({
                     <FileAudio className="h-4 w-4 text-blue-600" />
                   ) : memory.type === "video" ? (
                     <Video className="h-4 w-4 text-purple-600" />
+                  ) : memory.type === "document" ? (
+                    <FileText className="h-4 w-4 text-red-600" />
                   ) : (
                     <FileText className="h-4 w-4 text-amber-600" />
                   )}
-                  <span className="text-sm capitalize">{memory.type === "voice_memo" ? "Voice Memo" : memory.type === "audio" ? "Audio" : memory.type === "voice" ? "Voice Memo" : memory.type === "video" ? "Video" : memory.type}</span>
-                  {!isEditing && memory.type !== "voice_memo" && memory.type !== "audio" && memory.type !== "voice" && memory.type !== "video" && (
+                  <span className="text-sm capitalize">{memory.type === "voice_memo" ? "Voice Memo" : memory.type === "audio" ? "Audio" : memory.type === "voice" ? "Voice Memo" : memory.type === "video" ? "Video" : memory.type === "document" ? "Document" : memory.type}</span>
+                  {/* Edit button only shown for web and note types.
+                      Media types (voice, audio, video) and documents have immutable source files
+                      where the content is extracted/transcribed - editing doesn't make sense. */}
+                  {!isEditing && memory.type !== "voice_memo" && memory.type !== "audio" && memory.type !== "voice" && memory.type !== "video" && memory.type !== "document" && (
                     <Button
                       variant="ghost"
                       size="icon"
@@ -1275,6 +1413,180 @@ export function MemoryDetailPanel({
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* Document Viewer with PDF Preview */}
+              {memory.type === "document" && (
+                <div className="space-y-3">
+                  <div className="p-4 rounded-xl bg-slate-100/50 dark:bg-white/5 space-y-3">
+                    {/* PDF Preview */}
+                    <div className="relative rounded-lg overflow-hidden bg-slate-200 dark:bg-slate-800">
+                      {pdfData ? (
+                        <div className="flex flex-col items-center">
+                          <Document
+                            file={pdfData}
+                            onLoadSuccess={({ numPages }) => setPdfNumPages(numPages)}
+                            loading={
+                              <div className="flex items-center justify-center py-12">
+                                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                              </div>
+                            }
+                            error={
+                              <div className="flex items-center justify-center py-12 text-muted-foreground">
+                                Failed to load PDF
+                              </div>
+                            }
+                          >
+                            <Page
+                              pageNumber={pdfPageNumber}
+                              width={350}
+                              loading={
+                                <div className="flex items-center justify-center py-12">
+                                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                                </div>
+                              }
+                            />
+                          </Document>
+                        </div>
+                      ) : documentThumbnailUrl ? (
+                        <div
+                          className="aspect-[4/3] cursor-pointer group relative"
+                          onClick={() => loadPdfFile(memory.id)}
+                        >
+                          <img
+                            src={documentThumbnailUrl}
+                            alt={memory.title || "Document preview"}
+                            className="w-full h-full object-contain"
+                          />
+                          {/* Click to preview overlay */}
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {isPdfLoading ? (
+                              <Loader2 className="h-12 w-12 text-white animate-spin" />
+                            ) : (
+                              <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center">
+                                <FileText className="h-6 w-6 text-slate-900" />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div
+                          className="aspect-[4/3] flex items-center justify-center cursor-pointer hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
+                          onClick={() => loadPdfFile(memory.id)}
+                        >
+                          {isPdfLoading ? (
+                            <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />
+                          ) : (
+                            <div className="text-center">
+                              <FileText className="h-12 w-12 text-muted-foreground/50 mx-auto mb-2" />
+                              <span className="text-sm text-muted-foreground">Click to preview</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Pagination Controls (shown when PDF is loaded) */}
+                    {pdfData && memory.document_page_count && memory.document_page_count > 0 && (
+                      <div className="flex items-center justify-center gap-3">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setPdfPageNumber((prev) => Math.max(1, prev - 1))}
+                          disabled={pdfPageNumber <= 1}
+                          className="h-8 w-8"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <span className="text-sm text-muted-foreground">
+                          Page {pdfPageNumber} of {memory.document_page_count}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setPdfPageNumber((prev) => Math.min(memory.document_page_count!, prev + 1))}
+                          disabled={pdfPageNumber >= memory.document_page_count}
+                          className="h-8 w-8"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Document Info & Actions */}
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-muted-foreground uppercase">
+                        {memory.document_format || "PDF"}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        title="Open in external app"
+                        className="h-8 w-8"
+                        onClick={async () => {
+                          const filename = `${memory.title || "document"}.${memory.document_format || "pdf"}`;
+                          if (window.electronAPI?.openDocumentWithSystem) {
+                            const result = await window.electronAPI.openDocumentWithSystem(memory.id, filename);
+                            if (!result.success) {
+                              toast.error(result.error || "Failed to open document");
+                            }
+                          } else {
+                            // Fallback for non-Electron: download the file
+                            const token = getAppToken();
+                            const response = await fetch(`${API_BASE_URL}/api/document/${memory.id}/file`, {
+                              headers: token ? { "X-App-Token": token } : {},
+                            });
+                            if (response.ok) {
+                              const blob = await response.blob();
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = url;
+                              a.download = filename;
+                              a.click();
+                              URL.revokeObjectURL(url);
+                            } else {
+                              toast.error("Failed to download document");
+                            }
+                          }
+                        }}
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Extracted Content (collapsible) */}
+                  {memory.content && (
+                    <div className="space-y-2">
+                      <button
+                        className="flex items-center gap-2"
+                        onClick={() => setShowDocumentContent(!showDocumentContent)}
+                      >
+                        <span className="text-sm font-medium">Extracted Text</span>
+                        {showDocumentContent ? (
+                          <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </button>
+                      <div className="relative">
+                        <div
+                          className={cn(
+                            "text-sm text-muted-foreground leading-relaxed p-3 rounded-lg bg-slate-50 dark:bg-white/5 whitespace-pre-wrap",
+                            showDocumentContent
+                              ? "max-h-[300px] overflow-y-auto"
+                              : "max-h-[5.5rem] overflow-hidden"
+                          )}
+                        >
+                          {memory.content}
+                        </div>
+                        {!showDocumentContent && (
+                          <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-slate-50 dark:from-zinc-900 to-transparent rounded-b-lg pointer-events-none" />
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

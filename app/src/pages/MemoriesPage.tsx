@@ -6,6 +6,7 @@ import { MemoryCard } from "@/components/MemoryCard";
 import { VoiceMemoCard } from "@/components/VoiceMemoCard";
 import { AudioCard } from "@/components/AudioCard";
 import { VideoCard } from "@/components/VideoCard";
+import { DocumentCard } from "@/components/DocumentCard";
 import { MemoryDetailPanel } from "@/components/MemoryDetailPanel";
 import { AudioDropOverlay } from "@/components/AudioDropOverlay";
 import { NoteEditor } from "@/components/editor";
@@ -33,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useMemoryEvents } from "../hooks/useMemoryEvents";
 import { useVideoUpload } from "../hooks/useVideoUpload";
+import { useDocumentUpload, isDocumentFile, validateDocumentSize } from "../hooks/useDocumentUpload";
 import { apiFetch } from "@/lib/api";
 import type { TranscriptionStatus, VideoProcessingStatus } from "@/types/chat";
 
@@ -44,7 +46,7 @@ interface MemoryTag {
 
 interface Memory {
   id: number;
-  type: "web" | "note" | "voice_memo" | "audio" | "video" | "voice"; // "voice" for backwards compat
+  type: "web" | "note" | "voice_memo" | "audio" | "video" | "document" | "voice"; // "voice" for backwards compat
   url: string | null;
   title: string;
   summary: string | null;
@@ -60,6 +62,9 @@ interface Memory {
   video_height?: number;
   thumbnail_path?: string;
   video_processing_status?: VideoProcessingStatus;
+  // Document-specific fields
+  document_format?: string;
+  document_page_count?: number;
 }
 
 interface MemoryWithContent extends Memory {
@@ -73,7 +78,7 @@ interface Tag {
   usage_count: number;
 }
 
-type TypeFilter = "all" | "web" | "note" | "voice_memo" | "audio" | "video";
+type TypeFilter = "all" | "web" | "note" | "voice_memo" | "audio" | "video" | "document";
 type DateFilter = "all" | "today" | "week" | "month";
 
 const TYPE_FILTER_OPTIONS = [
@@ -83,6 +88,7 @@ const TYPE_FILTER_OPTIONS = [
   { value: "voice_memo", label: "Voice Memos", icon: Mic, iconColor: "text-orange-600" },
   { value: "audio", label: "Audio", icon: FileAudio, iconColor: "text-blue-600" },
   { value: "video", label: "Video", icon: Video, iconColor: "text-purple-600" },
+  { value: "document", label: "Documents", icon: FileText, iconColor: "text-red-600" },
 ] as const;
 
 const DATE_FILTER_OPTIONS = [
@@ -132,6 +138,7 @@ export default function MemoriesPage() {
   // File upload refs
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const videoInputRef = useRef<HTMLInputElement | null>(null);
+  const documentInputRef = useRef<HTMLInputElement | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
   // New menu state
@@ -140,23 +147,27 @@ export default function MemoriesPage() {
   // Video upload hook
   const { uploadVideo, uploadProgress, isUploading: isUploadingVideo } = useVideoUpload();
 
+  // Document upload hook
+  const { uploadDocument, isUploading: isUploadingDocument } = useDocumentUpload();
+
   const LIMIT = 20;
 
   // Supported file extensions
   const AUDIO_EXTENSIONS = ["mp3", "wav", "m4a", "webm", "ogg", "flac"];
   const VIDEO_EXTENSIONS = ["mp4", "webm", "mov", "mkv", "avi"];
+  const DOCUMENT_EXTENSIONS = ["pdf"];
 
   // File size limits (in bytes)
   const MAX_AUDIO_SIZE = 100 * 1024 * 1024; // 100 MB
   const MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500 MB
 
-  // File upload handler (audio and video)
+  // File upload handler (audio, video, and document)
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
     const fileArray = Array.from(files);
 
-    // Separate audio and video files
+    // Separate audio, video, and document files
     const audioFiles = fileArray.filter((file) => {
       const ext = file.name.split(".").pop()?.toLowerCase();
       return ext && AUDIO_EXTENSIONS.includes(ext);
@@ -167,9 +178,11 @@ export default function MemoriesPage() {
       return ext && VIDEO_EXTENSIONS.includes(ext);
     });
 
-    if (audioFiles.length === 0 && videoFiles.length === 0) {
+    const documentFiles = fileArray.filter((file) => isDocumentFile(file));
+
+    if (audioFiles.length === 0 && videoFiles.length === 0 && documentFiles.length === 0) {
       toast.error("No supported files detected", {
-        description: `Audio: ${AUDIO_EXTENSIONS.join(", ")} | Video: ${VIDEO_EXTENSIONS.join(", ")}`,
+        description: `Audio: ${AUDIO_EXTENSIONS.join(", ")} | Video: ${VIDEO_EXTENSIONS.join(", ")} | Documents: ${DOCUMENT_EXTENSIONS.join(", ")}`,
       });
       return;
     }
@@ -177,6 +190,7 @@ export default function MemoriesPage() {
     // Validate file sizes
     const oversizedAudio = audioFiles.filter((f) => f.size > MAX_AUDIO_SIZE);
     const oversizedVideo = videoFiles.filter((f) => f.size > MAX_VIDEO_SIZE);
+    const oversizedDocument = documentFiles.filter((f) => !validateDocumentSize(f).valid);
 
     if (oversizedAudio.length > 0) {
       toast.error(`${oversizedAudio.length} audio file(s) exceed 100 MB limit`, {
@@ -190,11 +204,18 @@ export default function MemoriesPage() {
       });
     }
 
+    if (oversizedDocument.length > 0) {
+      toast.error(`${oversizedDocument.length} document file(s) exceed 50 MB limit`, {
+        description: oversizedDocument.map((f) => f.name).join(", "),
+      });
+    }
+
     // Filter out oversized files
     const validAudioFiles = audioFiles.filter((f) => f.size <= MAX_AUDIO_SIZE);
     const validVideoFiles = videoFiles.filter((f) => f.size <= MAX_VIDEO_SIZE);
+    const validDocumentFiles = documentFiles.filter((f) => validateDocumentSize(f).valid);
 
-    if (validAudioFiles.length === 0 && validVideoFiles.length === 0) {
+    if (validAudioFiles.length === 0 && validVideoFiles.length === 0 && validDocumentFiles.length === 0) {
       return;
     }
 
@@ -262,12 +283,38 @@ export default function MemoriesPage() {
       }
     }
 
+    // Upload document files using the hook
+    if (validDocumentFiles.length > 0) {
+      const uploadPromises = validDocumentFiles.map((file) => uploadDocument(file));
+      const results = await Promise.all(uploadPromises);
+
+      const successful = results.filter((r) => r.success);
+      const failed = results.filter((r) => !r.success);
+
+      if (successful.length > 0) {
+        toast.success(
+          successful.length === 1
+            ? "Document uploaded"
+            : `${successful.length} documents uploaded`,
+          { description: "AI processing will begin shortly" }
+        );
+        fetchMemories(true);
+      }
+
+      if (failed.length > 0) {
+        toast.error(`Failed to upload ${failed.length} document(s)`);
+      }
+    }
+
     // Reset file inputs
     if (audioInputRef.current) {
       audioInputRef.current.value = "";
     }
     if (videoInputRef.current) {
       videoInputRef.current.value = "";
+    }
+    if (documentInputRef.current) {
+      documentInputRef.current.value = "";
     }
   };
 
@@ -632,12 +679,20 @@ export default function MemoriesPage() {
           className="hidden"
           onChange={(e) => handleFileUpload(e.target.files)}
         />
+        <input
+          ref={documentInputRef}
+          type="file"
+          accept=".pdf"
+          multiple
+          className="hidden"
+          onChange={(e) => handleFileUpload(e.target.files)}
+        />
 
         {/* New dropdown */}
         <Popover open={newMenuOpen} onOpenChange={setNewMenuOpen}>
           <PopoverTrigger asChild>
-            <Button disabled={isUploading || isUploadingVideo}>
-              {isUploading || isUploadingVideo ? (
+            <Button disabled={isUploading || isUploadingVideo || isUploadingDocument}>
+              {isUploading || isUploadingVideo || isUploadingDocument ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
                 <Plus className="h-4 w-4 mr-2" />
@@ -686,6 +741,16 @@ export default function MemoriesPage() {
             >
               <Video className="h-4 w-4 text-purple-600" />
               <span>Upload Video</span>
+            </button>
+            <button
+              className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded-sm hover:bg-muted/50 cursor-pointer"
+              onClick={() => {
+                documentInputRef.current?.click();
+                setNewMenuOpen(false);
+              }}
+            >
+              <FileText className="h-4 w-4 text-red-600" />
+              <span>Upload PDF</span>
             </button>
           </PopoverContent>
         </Popover>
@@ -877,6 +942,13 @@ export default function MemoriesPage() {
               ) : memory.type === "video" ? (
                 <VideoCard
                   memory={memory as Memory & { type: "video" }}
+                  onRemoveTag={handleRemoveTag}
+                  onExpand={handleExpand}
+                  formatDate={formatDate}
+                />
+              ) : memory.type === "document" ? (
+                <DocumentCard
+                  memory={memory as Memory & { type: "document" }}
                   onRemoveTag={handleRemoveTag}
                   onExpand={handleExpand}
                   formatDate={formatDate}

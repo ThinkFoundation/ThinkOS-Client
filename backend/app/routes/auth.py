@@ -5,6 +5,7 @@ from ..db import init_db, is_db_initialized, db_exists, reset_db_connection
 from ..services.secrets import derive_db_key, set_api_key, get_api_key, delete_api_key
 from ..services.audio_storage import set_encryption_key as set_audio_encryption_key, clear_encryption_key as clear_audio_encryption_key
 from ..services.video_storage import set_encryption_key as set_video_encryption_key, clear_encryption_key as clear_video_encryption_key
+from ..services.document_storage import set_encryption_key as set_document_encryption_key, clear_encryption_key as clear_document_encryption_key
 from ..schemas import SetPasswordRequest, UnlockRequest, ApiKeyRequest
 
 
@@ -33,6 +34,7 @@ async def setup_password(request: SetPasswordRequest):
     # Initialize encryption keys for media storage
     set_audio_encryption_key(request.password)
     set_video_encryption_key(request.password)
+    set_document_encryption_key(request.password)
 
     return {"success": True}
 
@@ -54,6 +56,7 @@ async def unlock(request: UnlockRequest):
     # Initialize encryption keys for media storage
     set_audio_encryption_key(request.password)
     set_video_encryption_key(request.password)
+    set_document_encryption_key(request.password)
 
     return {"success": True}
 
@@ -65,6 +68,7 @@ async def logout():
     # Clear media encryption keys
     clear_audio_encryption_key()
     clear_video_encryption_key()
+    clear_document_encryption_key()
     return {"success": True}
 
 

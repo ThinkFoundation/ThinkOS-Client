@@ -20,9 +20,10 @@ import { ChatInput } from "@/components/ChatInput";
 import { useConversation } from "@/contexts/ConversationContext";
 import { useConversations } from "@/hooks/useConversations";
 import { useVideoUpload } from "@/hooks/useVideoUpload";
+import { useDocumentUpload, isDocumentFile, validateDocumentSize } from "@/hooks/useDocumentUpload";
 import { ArrowRight } from "lucide-react";
 
-type MemoryType = "web" | "note" | "voice_memo" | "audio" | "video" | "voice";
+type MemoryType = "web" | "note" | "voice_memo" | "audio" | "video" | "voice" | "document";
 
 interface Memory {
   id: number;
@@ -42,6 +43,7 @@ const MEMORY_TYPE_CONFIG: Record<
   voice: { icon: Mic, colorClass: "text-orange-600" }, // backwards compat
   audio: { icon: FileAudio, colorClass: "text-blue-600" },
   video: { icon: Video, colorClass: "text-purple-600" },
+  document: { icon: FileText, colorClass: "text-red-600" },
 };
 
 interface HomePageProps {
@@ -63,6 +65,7 @@ function getGreeting(name?: string | null): string {
 
 const AUDIO_EXTENSIONS = ["mp3", "wav", "m4a", "webm", "ogg", "flac"];
 const VIDEO_EXTENSIONS = ["mp4", "webm", "mov", "mkv", "avi"];
+const DOCUMENT_EXTENSIONS = ["pdf"];
 const MAX_AUDIO_SIZE = 100 * 1024 * 1024; // 100 MB
 const MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500 MB
 
@@ -78,6 +81,7 @@ export default function HomePage({ userName }: HomePageProps) {
 
   const { conversations } = useConversations();
   const { uploadVideo, isUploading: isUploadingVideo } = useVideoUpload();
+  const { uploadDocument, isUploading: isUploadingDocument } = useDocumentUpload();
 
   useEffect(() => {
     fetchRecentMemories();
@@ -135,19 +139,32 @@ export default function HomePage({ userName }: HomePageProps) {
 
     const isAudio = AUDIO_EXTENSIONS.includes(ext);
     const isVideo = VIDEO_EXTENSIONS.includes(ext);
+    const isDocument = isDocumentFile(file);
 
-    if (!isAudio && !isVideo) {
-      toast.error(`Unsupported format. Use: ${[...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS].join(", ")}`);
+    if (!isAudio && !isVideo && !isDocument) {
+      toast.error(`Unsupported format. Use: ${[...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS, ...DOCUMENT_EXTENSIONS].join(", ")}`);
       if (uploadInputRef.current) uploadInputRef.current.value = "";
       return;
     }
 
-    const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_AUDIO_SIZE;
-    const maxLabel = isVideo ? "500 MB" : "100 MB";
-    if (file.size > maxSize) {
-      toast.error(`File too large. Maximum size is ${maxLabel}.`);
+    // Validate sizes (document validation is handled by the hook)
+    if (isAudio && file.size > MAX_AUDIO_SIZE) {
+      toast.error("File too large. Maximum size is 100 MB.");
       if (uploadInputRef.current) uploadInputRef.current.value = "";
       return;
+    }
+    if (isVideo && file.size > MAX_VIDEO_SIZE) {
+      toast.error("File too large. Maximum size is 500 MB.");
+      if (uploadInputRef.current) uploadInputRef.current.value = "";
+      return;
+    }
+    if (isDocument) {
+      const sizeValidation = validateDocumentSize(file);
+      if (!sizeValidation.valid) {
+        toast.error(sizeValidation.error!);
+        if (uploadInputRef.current) uploadInputRef.current.value = "";
+        return;
+      }
     }
 
     if (isVideo) {
@@ -159,6 +176,15 @@ export default function HomePage({ userName }: HomePageProps) {
         navigate("/memories");
       } else {
         toast.error(result.error || "Failed to upload video");
+      }
+    } else if (isDocument) {
+      // Upload document (PDF) using the hook
+      const result = await uploadDocument(file);
+      if (result.success) {
+        toast.success("Document uploaded successfully");
+        navigate("/memories");
+      } else {
+        toast.error(result.error || "Failed to upload document");
       }
     } else {
       // Direct upload for audio files
@@ -236,7 +262,7 @@ export default function HomePage({ userName }: HomePageProps) {
             </button>
             <button
               onClick={handleVoiceMemo}
-              disabled={isUploading || isUploadingVideo}
+              disabled={isUploading || isUploadingVideo || isUploadingDocument}
               className={cn(
                 "inline-flex items-center gap-2 px-4 py-2 rounded-full",
                 "text-xs font-medium text-muted-foreground",
@@ -252,7 +278,7 @@ export default function HomePage({ userName }: HomePageProps) {
             </button>
             <button
               onClick={() => uploadInputRef.current?.click()}
-              disabled={isUploading || isUploadingVideo}
+              disabled={isUploading || isUploadingVideo || isUploadingDocument}
               className={cn(
                 "inline-flex items-center gap-2 px-4 py-2 rounded-full",
                 "text-xs font-medium text-muted-foreground",
@@ -286,7 +312,7 @@ export default function HomePage({ userName }: HomePageProps) {
           <input
             ref={uploadInputRef}
             type="file"
-            accept={[...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS].map((e) => `.${e}`).join(",")}
+            accept={[...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS, ...DOCUMENT_EXTENSIONS].map((e) => `.${e}`).join(",")}
             onChange={handleUpload}
             className="hidden"
           />

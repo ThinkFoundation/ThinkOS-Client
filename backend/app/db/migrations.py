@@ -553,6 +553,26 @@ def migration_017(conn: Connection) -> None:
         conn.execute(text("ALTER TABLE memories ADD COLUMN video_processing_status VARCHAR(20)"))
 
 
+@migration(18, "Add document memory columns")
+def migration_018(conn: Connection) -> None:
+    """Add columns to support document memories (PDFs).
+
+    Columns added:
+    - document_path: Path to encrypted document file
+    - document_format: Format (pdf, etc.)
+    - document_page_count: Number of pages
+    """
+    result = conn.execute(text("PRAGMA table_info(memories)")).fetchall()
+    columns = [row[1] for row in result]
+
+    if "document_path" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN document_path VARCHAR(500)"))
+    if "document_format" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN document_format VARCHAR(20)"))
+    if "document_page_count" not in columns:
+        conn.execute(text("ALTER TABLE memories ADD COLUMN document_page_count INTEGER"))
+
+
 # --- Migration runner ---
 
 def run_migrations(conn: Connection) -> list[tuple[int, str]]:

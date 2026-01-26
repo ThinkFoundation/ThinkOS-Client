@@ -545,3 +545,138 @@ async def process_voice_memory_async(memory_id: int) -> None:
             )
         except Exception:
             pass
+
+
+async def generate_document_title(content: str, filename: str = "") -> str:
+    """Generate a concise title from document content."""
+    client = await get_client()
+    model = get_model()
+
+    prompt = f"""Generate a concise, descriptive title for this document.
+
+Original filename: {filename}
+Content preview: {content[:2000]}
+
+Requirements:
+- 5-10 words maximum
+- Capture the main topic or purpose
+- Be informative and scannable
+
+Title:"""
+
+    try:
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that creates concise, descriptive titles for documents. Respond with only the title, no quotes or extra formatting."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=50,
+        )
+        title = response.choices[0].message.content.strip() if response.choices[0].message.content else ""
+        # Remove quotes if the model wrapped the title
+        if title.startswith('"') and title.endswith('"'):
+            title = title[1:-1]
+        return title
+    except Exception as e:
+        logger.error(f"Failed to generate document title: {e}")
+        return ""
+
+
+async def process_document_memory_async(memory_id: int) -> None:
+    """Background task to process a document memory.
+
+    Pipeline:
+    1. Generate title from content
+    2. Generate summary, embedding_summary, tags
+    3. Create embedding from embedding_summary
+    4. Emit MEMORY_UPDATED event
+
+    Note: Text extraction happens during upload, so content is already available.
+    """
+    try:
+        # Get the memory
+        memory = await get_memory(memory_id)
+        if not memory:
+            logger.error(f"Document memory {memory_id} not found for processing")
+            return
+
+        memory_type = memory.get("type")
+        if memory_type != "document":
+            logger.error(f"Memory {memory_id} is not a document memory (type={memory_type})")
+            return
+
+        content = memory.get("content")
+        if not content:
+            logger.warning(f"Document memory {memory_id} has no content, skipping AI processing")
+            return
+
+        original_title = memory.get("title", "")
+
+        # Get existing tags for context
+        all_tags = await get_all_tags()
+        existing_tag_names = [t["name"] for t in all_tags]
+
+        # Generate title, summary, embedding_summary, and tags in parallel
+        tasks = [
+            generate_document_title(content, original_title),
+            generate_summary(content, original_title),
+            generate_embedding_summary(content, original_title),
+            generate_tags(content, original_title, existing_tag_names),
+        ]
+        results = await asyncio.gather(*tasks)
+
+        title = results[0]
+        summary = results[1]
+        embedding_summary = results[2]
+        tags = results[3]
+
+        updated = False
+
+        # Update title
+        if title:
+            await update_memory_title(memory_id, title)
+            logger.info(f"Updated document memory {memory_id} title: '{title}'")
+            updated = True
+
+        # Update summary
+        if summary:
+            await update_memory_summary(memory_id, summary)
+            logger.info(f"Updated document memory {memory_id} with summary")
+            updated = True
+
+        # Update embedding summary and create embedding
+        if embedding_summary:
+            await update_memory_embedding_summary(memory_id, embedding_summary)
+            logger.info(f"Updated document memory {memory_id} with embedding summary")
+            updated = True
+
+            # Create embedding from embedding_summary
+            try:
+                if embedding_summary.strip():
+                    embedding = await get_embedding(embedding_summary)
+                    embedding_model = get_current_embedding_model()
+                    await update_memory_embedding(memory_id, embedding, embedding_model)
+                    logger.info(f"Created embedding for document memory {memory_id}")
+            except Exception as e:
+                logger.error(f"Failed to create embedding for document memory {memory_id}: {e}")
+
+        # Add AI-generated tags
+        if tags:
+            await add_tags_to_memory(memory_id, tags, source="ai")
+            logger.info(f"Added {len(tags)} AI tags to document memory {memory_id}: {tags}")
+            updated = True
+
+        # Emit update event (always emit, even if some AI generation failed)
+        updated_memory = await get_memory(memory_id)
+        await event_manager.publish(
+            MemoryEvent(
+                type=EventType.MEMORY_UPDATED,
+                memory_id=memory_id,
+                data=updated_memory,
+            )
+        )
+        logger.info(f"Emitted update event for document memory {memory_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to process document memory {memory_id}: {e}")

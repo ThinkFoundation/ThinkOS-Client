@@ -41,6 +41,11 @@ class Memory(Base):
     video_height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     video_processing_status: Mapped[str | None] = mapped_column(String(20), nullable=True)  # "pending_extraction" | "extracting" | "ready" | "failed"
 
+    # Document memory fields
+    document_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    document_format: Mapped[str | None] = mapped_column(String(20), nullable=True)  # pdf (extensible later)
+    document_page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     tags: Mapped[list["MemoryTag"]] = relationship(back_populates="memory", cascade="all, delete-orphan")
 
 
