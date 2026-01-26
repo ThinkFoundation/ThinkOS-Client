@@ -37,6 +37,8 @@ declare global {
       deleteTempFile: (path: string) => Promise<{ success: boolean; error?: string }>;
       onVideoProcessProgress: (callback: (data: { progress: number; stage: string }) => void) => void;
       removeVideoProcessListeners: () => void;
+      // Document viewing
+      openDocumentWithSystem: (documentId: number, filename: string) => Promise<{ success: boolean; error?: string }>;
     };
   }
 }

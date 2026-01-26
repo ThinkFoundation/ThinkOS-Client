@@ -43,3 +43,6 @@ backend/native_host/think-native-stub
 
 # FFmpeg (downloaded on first use, cached locally)
 app/public/ffmpeg/
+
+# PDF.js worker (copied by vite config at build time)
+app/public/pdf.worker.min.mjs

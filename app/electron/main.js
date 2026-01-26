@@ -639,3 +639,43 @@ ipcMain.handle('delete-temp-file', async (_event, filePath) => {
     return { success: false, error: error.message };
   }
 });
+
+// Open a document with the system's default viewer
+ipcMain.handle('open-document-with-system', async (_event, documentId, filename) => {
+  try {
+    // Fetch the document from the backend with authentication
+    const response = await fetch(`http://localhost:8765/api/document/${documentId}/file`, {
+      headers: { 'X-App-Token': APP_TOKEN }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch document: ${response.status}`);
+    }
+
+    // Write to temp file
+    const tempDir = app.getPath('temp');
+    const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const tempPath = path.join(tempDir, `think_doc_${Date.now()}_${safeName}`);
+    const buffer = await response.arrayBuffer();
+    fs.writeFileSync(tempPath, Buffer.from(buffer));
+
+    // Open with system default application
+    const result = await shell.openPath(tempPath);
+    if (result) {
+      // shell.openPath returns empty string on success, error message on failure
+      throw new Error(result);
+    }
+
+    // Schedule cleanup after 60 seconds (give app time to open and load)
+    setTimeout(() => {
+      fs.unlink(tempPath, (err) => {
+        if (err) console.warn('Failed to cleanup temp file:', tempPath, err.message);
+      });
+    }, 60000);
+
+    return { success: true };
+  } catch (error) {
+    console.error('[IPC] open-document-with-system error:', error);
+    return { success: false, error: error.message };
+  }
+});
