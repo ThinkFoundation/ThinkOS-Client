@@ -8,8 +8,9 @@ import fs from 'fs';
 const require = createRequire(import.meta.url);
 
 // Resolve pdfjs-dist worker path dynamically (works with pnpm)
+// Normalize to forward slashes for cross-platform compatibility with vite-plugin-static-copy
 const pdfjsDistPath = path.dirname(require.resolve('pdfjs-dist/package.json'));
-const pdfjsWorkerPath = path.join(pdfjsDistPath, 'build', 'pdf.worker.min.mjs');
+const pdfjsWorkerPath = path.join(pdfjsDistPath, 'build', 'pdf.worker.min.mjs').replace(/\\/g, '/');
 
 // Copy worker to public folder for dev mode (vite serves public folder as-is)
 // Always copy to ensure it stays up-to-date when pdfjs-dist updates
