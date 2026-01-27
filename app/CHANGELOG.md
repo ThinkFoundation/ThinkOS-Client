@@ -1,5 +1,11 @@
 # think-app
 
+## 0.6.2
+
+### Patch Changes
+
+- e1225c1: Improve readability of note editor action bar by increasing background opacity and blur effect
+
 ## 0.6.1
 
 ### Patch Changes
