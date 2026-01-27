@@ -33,6 +33,6 @@ export const editor = {
   title:
     "w-full text-3xl font-heading font-semibold bg-transparent border-none outline-none placeholder:text-muted-foreground/50",
   actionBar:
-    "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white/70 dark:bg-white/5 backdrop-blur-md border border-white/60 dark:border-white/10 shadow-lg shadow-black/10 dark:shadow-black/30 px-4 py-3 rounded-2xl flex items-center gap-3",
+    "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white/85 dark:bg-neutral-900/85 backdrop-blur-xl border border-white/60 dark:border-white/20 shadow-lg shadow-black/10 dark:shadow-black/30 px-4 py-3 rounded-2xl flex items-center gap-3",
   actionBarWarning: "border-amber-500/50 shadow-amber-500/20",
 };
