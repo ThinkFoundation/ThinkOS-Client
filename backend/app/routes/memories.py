@@ -24,8 +24,8 @@ from ..db import (
 )
 from ..db.search import search_similar_memories
 from ..services.embeddings import get_embedding, get_current_embedding_model
-from ..services.query_processing import preprocess_query, extract_keywords
-from ..services.ai_processing import process_memory_async
+from ..services.query.processing import preprocess_query, extract_keywords
+from ..services.ai.processing import process_memory_async
 from ..schemas import MemoryCreate, format_memory_for_embedding
 
 logger = logging.getLogger(__name__)

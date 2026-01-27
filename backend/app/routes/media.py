@@ -12,14 +12,14 @@ from ..db.crud import (
     delete_media_memory,
     reset_transcription_status_if_not_processing,
 )
-from ..services.audio_storage import save_audio_file, read_audio_file, delete_audio_file
-from ..services.audio_utils import (
+from ..services.media.audio_storage import save_audio_file, read_audio_file, delete_audio_file
+from ..services.media.audio_utils import (
     validate_audio_format,
     get_format_from_mime,
     get_audio_duration,
     SUPPORTED_FORMATS,
 )
-from ..services.ai_processing import process_voice_memory_async
+from ..services.ai.processing import process_voice_memory_async
 from ..events import event_manager, MemoryEvent, EventType
 
 logger = logging.getLogger(__name__)

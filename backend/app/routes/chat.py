@@ -8,13 +8,13 @@ from openai import APIConnectionError
 
 from ..services.ai import chat as ai_chat, chat_stream as ai_chat_stream, get_model
 from ..models_info import get_context_window
-from ..services.ai_processing import process_conversation_title_async
+from ..services.ai.processing import process_conversation_title_async
 from ..services.embeddings import get_embedding, get_current_embedding_model
-from ..services.query_processing import preprocess_query, extract_keywords
-from ..services.query_rewriting import maybe_rewrite_query
-from ..services.suggestions import get_quick_prompts, generate_followup_suggestions
-from ..services.special_handlers import is_special_prompt, execute_special_handler
-from ..services.memory_filtering import filter_memories_dynamically, format_memories_as_context
+from ..services.query.processing import preprocess_query, extract_keywords
+from ..services.ai.query_rewriting import maybe_rewrite_query
+from ..services.ai.suggestions import get_quick_prompts, generate_followup_suggestions
+from ..services.query.special_handlers import is_special_prompt, execute_special_handler
+from ..services.embeddings.filtering import filter_memories_dynamically, format_memories_as_context
 from ..db.search import search_similar_memories
 from ..schemas import ChatRequest
 from .. import config

@@ -13,22 +13,22 @@ from ..db.crud import (
     delete_document_memory,
     update_document_thumbnail,
 )
-from ..services.document_storage import (
+from ..services.media.document_storage import (
     save_document_file,
     read_document_file,
     delete_document_file,
 )
-from ..services.video_storage import (
+from ..services.media.video_storage import (
     save_thumbnail,
     read_thumbnail,
     delete_thumbnail,
 )
-from ..services.document_utils import (
+from ..services.media.document_utils import (
     validate_document_format,
     extract_pdf_text,
     generate_pdf_thumbnail,
 )
-from ..services.ai_processing import process_document_memory_async
+from ..services.ai.processing import process_document_memory_async
 from ..events import event_manager, MemoryEvent, EventType
 
 logger = logging.getLogger(__name__)

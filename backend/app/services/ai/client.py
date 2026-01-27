@@ -1,7 +1,7 @@
 from typing import AsyncGenerator
 from openai import AsyncOpenAI
-from .. import config
-from ..models_info import get_provider_config
+from ... import config
+from ...models_info import get_provider_config
 
 
 # Custom system prompt for Think
@@ -14,7 +14,7 @@ Keep responses conversational and concise. Be helpful and warm, like a knowledge
 
 async def get_client() -> AsyncOpenAI:
     """Get configured OpenAI client for the current provider."""
-    from .secrets import get_api_key
+    from ..secrets import get_api_key
 
     provider = config.settings.ai_provider
 

@@ -636,7 +636,7 @@ WHISPER_MODEL_INFO = [
 @router.get("/settings/transcription")
 async def get_transcription_settings() -> TranscriptionSettings:
     """Get current transcription settings."""
-    from ..services.transcription import get_whisper_model_setting
+    from ..services.media.transcription import get_whisper_model_setting
 
     whisper_model = await get_whisper_model_setting()
     return TranscriptionSettings(whisper_model=whisper_model)
@@ -645,7 +645,7 @@ async def get_transcription_settings() -> TranscriptionSettings:
 @router.post("/settings/transcription")
 async def update_transcription_settings(settings: TranscriptionSettings):
     """Update transcription settings."""
-    from ..services.transcription import WHISPER_MODELS, unload_whisper_model
+    from ..services.media.transcription import WHISPER_MODELS, unload_whisper_model
 
     if settings.whisper_model not in WHISPER_MODELS:
         raise HTTPException(

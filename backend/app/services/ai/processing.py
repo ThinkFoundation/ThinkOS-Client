@@ -3,10 +3,10 @@ import asyncio
 import json
 import logging
 
-from .ai import get_client, get_model
-from .embeddings import get_embedding, get_current_embedding_model
-from .transcription import transcribe_audio
-from ..db.crud import (
+from .client import get_client, get_model
+from ..embeddings import get_embedding, get_current_embedding_model
+from ..media.transcription import transcribe_audio
+from ...db.crud import (
     get_memory,
     update_memory_summary,
     update_memory_embedding_summary,
@@ -18,7 +18,7 @@ from ..db.crud import (
     get_all_tags,
     update_conversation_title,
 )
-from ..events import event_manager, MemoryEvent, EventType
+from ...events import event_manager, MemoryEvent, EventType
 
 logger = logging.getLogger(__name__)
 

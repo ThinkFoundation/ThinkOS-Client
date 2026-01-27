@@ -5,8 +5,8 @@ import re
 import threading
 from datetime import datetime, timedelta, timezone
 
-from .ai import get_client, get_model
-from ..db.crud import get_memories, get_all_tags
+from .client import get_client, get_model
+from ...db.crud import get_memories, get_all_tags
 
 logger = logging.getLogger(__name__)
 

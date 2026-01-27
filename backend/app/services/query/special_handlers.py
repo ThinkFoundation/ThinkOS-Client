@@ -6,7 +6,7 @@ Instead, they use date-based retrieval or other strategies.
 """
 import logging
 
-from ..db.crud import get_memories
+from ...db.crud import get_memories
 
 logger = logging.getLogger(__name__)
 

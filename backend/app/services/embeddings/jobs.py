@@ -15,8 +15,8 @@ from typing import Any
 
 from sqlalchemy import select
 
-from ..db.core import get_session_maker, run_sync
-from ..models import Job
+from ...db.core import get_session_maker, run_sync
+from ...models import Job
 
 logger = logging.getLogger(__name__)
 
@@ -166,9 +166,9 @@ async def reembed_worker(job_id: str) -> None:
 
     Progress is tracked across both phases for smooth UI updates.
     """
-    from .embeddings import get_embedding, get_current_embedding_model
-    from .ai_processing import generate_embedding_summary
-    from ..db.crud import (
+    from .client import get_embedding, get_current_embedding_model
+    from ..ai.processing import generate_embedding_summary
+    from ...db.crud import (
         count_memories_needing_processing,
         get_memories_without_embedding_summary,
         get_memories_needing_reembedding,

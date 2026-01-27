@@ -5,9 +5,9 @@ import httpx
 import numpy as np
 from openai import AsyncOpenAI
 
-from .. import config
-from ..models_info import get_provider_config
-from .secrets import get_api_key
+from ... import config
+from ...models_info import get_provider_config
+from ..secrets import get_api_key
 
 logger = logging.getLogger(__name__)
 

@@ -9,7 +9,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from ..services.jobs import job_manager, reembed_worker, JobStatus
+from ..services.embeddings.jobs import job_manager, reembed_worker, JobStatus
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 

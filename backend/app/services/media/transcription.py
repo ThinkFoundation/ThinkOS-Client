@@ -8,7 +8,7 @@ from pathlib import Path
 from faster_whisper import WhisperModel
 
 from .audio_storage import read_audio_file
-from ..db.crud import get_setting
+from ...db.crud import get_setting
 
 logger = logging.getLogger(__name__)
 

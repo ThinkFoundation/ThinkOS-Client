@@ -15,7 +15,7 @@ from ..db.crud import (
     update_video_processing_status,
     reset_transcription_status_if_not_processing,
 )
-from ..services.video_storage import (
+from ..services.media.video_storage import (
     save_video_file,
     read_video_file,
     delete_video_file,
@@ -23,12 +23,12 @@ from ..services.video_storage import (
     read_thumbnail,
     delete_thumbnail,
 )
-from ..services.audio_storage import (
+from ..services.media.audio_storage import (
     save_audio_file,
     read_audio_file,
     delete_audio_file,
 )
-from ..services.ai_processing import process_voice_memory_async
+from ..services.ai.processing import process_voice_memory_async
 from ..events import event_manager, MemoryEvent, EventType
 
 logger = logging.getLogger(__name__)

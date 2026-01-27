@@ -3,7 +3,7 @@
 import logging
 import re
 
-from .ai import get_client, get_model
+from .client import get_client, get_model
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ def needs_rewriting(query: str, history: list[dict]) -> bool:
             return True
 
     # Check if query produces minimal keywords
-    from .query_processing import extract_keywords
+    from ..query.processing import extract_keywords
 
     keywords = extract_keywords(query)
     if (not keywords or len(keywords.split(" OR ")) <= 1) and len(history) >= 2:

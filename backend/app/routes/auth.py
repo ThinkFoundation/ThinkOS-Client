@@ -3,9 +3,9 @@ from fastapi import APIRouter, HTTPException
 from ..config import reload_settings
 from ..db import init_db, is_db_initialized, db_exists, reset_db_connection
 from ..services.secrets import derive_db_key, set_api_key, get_api_key, delete_api_key
-from ..services.audio_storage import set_encryption_key as set_audio_encryption_key, clear_encryption_key as clear_audio_encryption_key
-from ..services.video_storage import set_encryption_key as set_video_encryption_key, clear_encryption_key as clear_video_encryption_key
-from ..services.document_storage import set_encryption_key as set_document_encryption_key, clear_encryption_key as clear_document_encryption_key
+from ..services.media.audio_storage import set_encryption_key as set_audio_encryption_key, clear_encryption_key as clear_audio_encryption_key
+from ..services.media.video_storage import set_encryption_key as set_video_encryption_key, clear_encryption_key as clear_video_encryption_key
+from ..services.media.document_storage import set_encryption_key as set_document_encryption_key, clear_encryption_key as clear_document_encryption_key
 from ..schemas import SetPasswordRequest, UnlockRequest, ApiKeyRequest
 
 

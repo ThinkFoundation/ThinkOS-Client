@@ -9,7 +9,7 @@ import os
 from cryptography.fernet import Fernet, InvalidToken
 import base64
 
-from .secrets import get_or_create_salt
+from ..secrets import get_or_create_salt
 
 logger = logging.getLogger(__name__)
 
