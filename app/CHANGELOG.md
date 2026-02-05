@@ -1,5 +1,11 @@
 # think-app
 
+## 0.7.2
+
+### Patch Changes
+
+- a809ac2: Fix build: run changelog parser before TypeScript compilation
+
 ## 0.7.1
 
 ### Patch Changes
