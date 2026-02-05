@@ -133,3 +133,17 @@ class Job(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class MemoryLink(Base):
+    __tablename__ = "memory_links"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_memory_id: Mapped[int] = mapped_column(ForeignKey("memories.id", ondelete="CASCADE"))
+    target_memory_id: Mapped[int] = mapped_column(ForeignKey("memories.id", ondelete="CASCADE"))
+    link_type: Mapped[str] = mapped_column(String(20), default="manual")  # "manual" or "auto"
+    relevance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    source_memory: Mapped["Memory"] = relationship(foreign_keys=[source_memory_id])
+    target_memory: Mapped["Memory"] = relationship(foreign_keys=[target_memory_id])

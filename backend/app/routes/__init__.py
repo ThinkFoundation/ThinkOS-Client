@@ -9,6 +9,7 @@ from .jobs import router as jobs_router
 from .media import router as media_router
 from .video import router as video_router
 from .document import router as document_router
+from .links import router as links_router
 
 router = APIRouter()
 router.include_router(auth_router)
@@ -20,3 +21,4 @@ router.include_router(jobs_router)
 router.include_router(media_router)
 router.include_router(video_router)
 router.include_router(document_router)
+router.include_router(links_router)
