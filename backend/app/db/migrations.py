@@ -573,6 +573,42 @@ def migration_018(conn: Connection) -> None:
         conn.execute(text("ALTER TABLE memories ADD COLUMN document_page_count INTEGER"))
 
 
+@migration(19, "Create memory_links table for knowledge graph")
+def migration_019(conn: Connection) -> None:
+    """Create memory_links table for bidirectional memory relationships.
+
+    This table stores links between memories to build a knowledge graph.
+    Links are stored bidirectionally (A→B and B→A as separate rows) for efficient querying.
+    """
+    result = conn.execute(text(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='memory_links'"
+    )).fetchone()
+
+    if not result:
+        conn.execute(text("""
+            CREATE TABLE memory_links (
+                id INTEGER PRIMARY KEY,
+                source_memory_id INTEGER NOT NULL,
+                target_memory_id INTEGER NOT NULL,
+                link_type VARCHAR(20) DEFAULT 'manual',
+                relevance_score FLOAT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (source_memory_id) REFERENCES memories(id) ON DELETE CASCADE,
+                FOREIGN KEY (target_memory_id) REFERENCES memories(id) ON DELETE CASCADE,
+                CHECK (source_memory_id != target_memory_id),
+                UNIQUE(source_memory_id, target_memory_id)
+            )
+        """))
+
+        # Create indexes for efficient querying
+        conn.execute(text(
+            "CREATE INDEX idx_memory_links_source ON memory_links(source_memory_id)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX idx_memory_links_target ON memory_links(target_memory_id)"
+        ))
+
+
 # --- Migration runner ---
 
 def run_migrations(conn: Connection) -> list[tuple[int, str]]:

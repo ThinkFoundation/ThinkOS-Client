@@ -67,6 +67,14 @@ from .media import (
     delete_document_memory,
 )
 
+# Link CRUD functions
+from .links import (
+    create_link,
+    delete_link,
+    get_memory_links,
+    memory_exists,
+)
+
 __all__ = [
     # Memory functions
     "create_memory",
@@ -122,4 +130,9 @@ __all__ = [
     "get_document_memory",
     "update_document_thumbnail",
     "delete_document_memory",
+    # Link functions
+    "create_link",
+    "delete_link",
+    "get_memory_links",
+    "memory_exists",
 ]

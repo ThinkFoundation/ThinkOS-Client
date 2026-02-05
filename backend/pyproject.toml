@@ -29,6 +29,8 @@ pillow = "^11.0.0"     # PIL-like license - image processing
 pywin32 = {version = "^306", markers = "sys_platform == 'win32'"}
 python-multipart = "^0.0.21"
 pypdfium2 = "^5.3.0"
+networkx = "^3.2"
+cachetools = "^5.3.0"
 
 [tool.poetry.group.dev.dependencies]
 pyinstaller = "^6.0.0"

@@ -34,6 +34,7 @@ import {
   ExternalLink,
   ChevronLeft,
   ChevronRight,
+  Plus,
 } from "lucide-react";
 
 // Set up PDF.js worker - served from public folder (dev) or copied to dist (build)
@@ -44,10 +45,11 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 ).href;
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { apiFetch, getAppToken } from "@/lib/api";
+import { apiFetch, getAppToken, getMemoryLinks, deleteLink, createLink, getMemorySuggestions, type MemoryLink, type MemorySuggestion } from "@/lib/api";
 import { API_BASE_URL } from "@/constants";
 import { useMemoryEvents } from "../hooks/useMemoryEvents";
 import { useConversation } from "../contexts/ConversationContext";
+import { LinkMemoryDialog } from "./LinkMemoryDialog";
 import type { TranscriptionStatus, TranscriptSegment, VideoProcessingStatus } from "@/types/chat";
 
 interface MemoryTag {
@@ -157,20 +159,42 @@ export function MemoryDetailPanel({
   const [isPdfLoading, setIsPdfLoading] = useState(false);
   const pdfBlobUrlRef = useRef<string | null>(null);
 
+  // Links/connections state
+  const [links, setLinks] = useState<MemoryLink[]>([]);
+  const [isLoadingLinks, setIsLoadingLinks] = useState(false);
+  const [showLinkDialog, setShowLinkDialog] = useState(false);
+
+  // Suggestions state
+  const [suggestions, setSuggestions] = useState<MemorySuggestion[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [acceptingSuggestionId, setAcceptingSuggestionId] = useState<number | null>(null);
+
   const titleInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { startNewChat, addAttachedMemory } = useConversation();
 
-  // Listen for SSE updates to refresh memory data (e.g., after summary regeneration)
+  // Listen for SSE updates to refresh memory data (e.g., after summary regeneration, link changes)
   useMemoryEvents({
     onMemoryUpdated: (updatedMemoryId, data) => {
       if (updatedMemoryId === memoryId && data) {
-        const updatedMemory = data as Memory;
-        setMemory(updatedMemory);
-        setIsRegenerating(false);
-        if (!isEditing) {
-          setEditedTitle(updatedMemory.title || "");
-          setEditedContent(updatedMemory.content || "");
+        // Handle link events
+        const eventData = data as any;
+        if (eventData.action === "link_created" || eventData.action === "link_deleted") {
+          // Refresh links when a link is created or deleted
+          if (memoryId) {
+            fetchLinks(memoryId);
+            // Also refresh suggestions since the linked memory should be excluded
+            fetchSuggestions(memoryId);
+          }
+        } else {
+          // Handle regular memory updates
+          const updatedMemory = data as Memory;
+          setMemory(updatedMemory);
+          setIsRegenerating(false);
+          if (!isEditing) {
+            setEditedTitle(updatedMemory.title || "");
+            setEditedContent(updatedMemory.content || "");
+          }
         }
       }
     },
@@ -181,6 +205,7 @@ export function MemoryDetailPanel({
   useEffect(() => {
     if (memoryId && isOpen) {
       fetchMemory(memoryId);
+      fetchSuggestions(memoryId);
     }
   }, [memoryId, isOpen]);
 
@@ -353,11 +378,93 @@ export function MemoryDetailPanel({
         setMemory(data);
         setEditedTitle(data.title || "");
         setEditedContent(data.content || "");
+        // Fetch links for this memory
+        fetchLinks(id);
       }
     } catch (err) {
       console.error("Failed to fetch memory:", err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchLinks = async (id: number) => {
+    setIsLoadingLinks(true);
+    try {
+      const links = await getMemoryLinks(id);
+      setLinks(links);
+    } catch (err) {
+      console.error("Failed to fetch links:", err);
+    } finally {
+      setIsLoadingLinks(false);
+    }
+  };
+
+  const fetchSuggestions = async (id: number) => {
+    setIsLoadingSuggestions(true);
+    try {
+      const suggestions = await getMemorySuggestions(id, 5, 0.6);
+      setSuggestions(suggestions);
+    } catch (err) {
+      console.error("Failed to fetch suggestions:", err);
+      // Fail silently - don't block UI
+    } finally {
+      setIsLoadingSuggestions(false);
+    }
+  };
+
+  const handleAcceptSuggestion = async (suggestion: MemorySuggestion) => {
+    if (!memoryId || !memory) return;
+
+    setAcceptingSuggestionId(suggestion.memory_id);
+    try {
+      await createLink(
+        memoryId,
+        suggestion.memory_id,
+        "auto",
+        suggestion.relevance
+      );
+
+      toast.success(`Connected to ${suggestion.title || "memory"}`);
+
+      // Remove from suggestions
+      setSuggestions(prev => prev.filter(s => s.memory_id !== suggestion.memory_id));
+
+      // Refresh links
+      fetchLinks(memoryId);
+
+      // Notify parent to refresh graph
+      onMemoryUpdated(memory);
+    } catch (err) {
+      console.error("Failed to accept suggestion:", err);
+      toast.error("Failed to create link");
+    } finally {
+      setAcceptingSuggestionId(null);
+    }
+  };
+
+  const handleDeleteLink = async (targetId: number) => {
+    if (!memoryId || !memory) return;
+    try {
+      await deleteLink(memoryId, targetId);
+      toast.success("Link removed");
+      // Refresh links
+      fetchLinks(memoryId);
+      // Notify parent to refresh graph
+      onMemoryUpdated(memory);
+    } catch (err) {
+      console.error("Failed to delete link:", err);
+      toast.error("Failed to remove link");
+    }
+  };
+
+  const handleLinkCreated = () => {
+    if (memoryId) {
+      fetchLinks(memoryId);
+      // Notify parent to refresh graph
+      if (memory) {
+        onMemoryUpdated(memory);
+      }
     }
   };
 
@@ -1804,18 +1911,179 @@ export function MemoryDetailPanel({
                 </div>
               </div>
 
+              {/* Connections Section */}
+              <div className="space-y-3 pt-4 border-t">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Network className="h-4 w-4" />
+                    <span className="text-sm font-medium">Connections</span>
+                    {links.length > 0 && (
+                      <span className="text-xs bg-muted px-2 py-0.5 rounded-full">
+                        {links.length}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        navigate(`/graph?focus=${memoryId}`);
+                        onClose();
+                      }}
+                      className="h-7 px-2"
+                      title="View in graph"
+                    >
+                      <Network className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowLinkDialog(true)}
+                      className="h-7 px-2"
+                    >
+                      <LinkIcon className="h-3.5 w-3.5 mr-1.5" />
+                      Link Memory
+                    </Button>
+                  </div>
+                </div>
+
+                {isLoadingLinks ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : links.length > 0 ? (
+                  <div className="space-y-2">
+                    {links.map((link) => {
+                      const Icon = link.type === "web" ? Globe :
+                                   link.type === "note" ? FileText :
+                                   link.type === "voice_memo" || link.type === "voice" ? Mic :
+                                   link.type === "audio" ? FileAudio :
+                                   link.type === "video" ? Video :
+                                   FileText;
+
+                      return (
+                        <div
+                          key={link.id}
+                          className="flex items-start gap-2 p-2 rounded-lg border bg-muted/30 hover:bg-muted/50 transition-colors group"
+                        >
+                          <Icon className="h-4 w-4 mt-0.5 text-muted-foreground flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <button
+                              onClick={() => {
+                                onClose();
+                                // Navigate to the linked memory after a brief delay
+                                setTimeout(() => {
+                                  navigate(`/memories?open=${link.memory_id}`);
+                                }, 100);
+                              }}
+                              className="text-sm font-medium hover:underline text-left truncate block w-full"
+                            >
+                              {link.title || "Untitled"}
+                            </button>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-xs text-muted-foreground capitalize">
+                                {link.link_type}
+                              </span>
+                              {link.relevance_score && (
+                                <span className="text-xs text-muted-foreground">
+                                  {Math.round(link.relevance_score * 100)}% match
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteLink(link.memory_id)}
+                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-sm text-muted-foreground">
+                    <Network className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No connections yet</p>
+                    <p className="text-xs mt-1">Link related memories to build your knowledge graph</p>
+                  </div>
+                )}
+
+                {/* Suggested Connections */}
+                {(isLoadingSuggestions || suggestions.length > 0) && (
+                  <div className="space-y-3 pt-4 border-t border-dashed">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                      <span className="text-sm font-medium">Suggested Connections</span>
+                    </div>
+
+                    {isLoadingSuggestions ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                        <span className="ml-2 text-sm text-muted-foreground">Finding related memories...</span>
+                      </div>
+                    ) : suggestions.length > 0 ? (
+                      <div className="space-y-2">
+                        {suggestions.map((suggestion) => {
+                          const Icon = suggestion.type === "web" ? Globe :
+                                       suggestion.type === "note" ? FileText :
+                                       suggestion.type === "voice_memo" || suggestion.type === "voice" ? Mic :
+                                       suggestion.type === "audio" ? FileAudio :
+                                       suggestion.type === "video" ? Video :
+                                       FileText;
+
+                          const relevancePercent = Math.round(suggestion.relevance * 100);
+
+                          return (
+                            <div
+                              key={suggestion.memory_id}
+                              className="flex items-start gap-2 p-3 rounded-lg border border-dashed bg-muted/10 hover:bg-muted/20 transition-colors group"
+                            >
+                              <Icon className="h-4 w-4 mt-0.5 text-muted-foreground flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">
+                                  {suggestion.title || "Untitled"}
+                                </div>
+                                {suggestion.summary && (
+                                  <div className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                                    {suggestion.summary}
+                                  </div>
+                                )}
+                                <div className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                                  {relevancePercent}% match
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleAcceptSuggestion(suggestion)}
+                                disabled={acceptingSuggestionId === suggestion.memory_id}
+                                className="h-7 w-7 flex-shrink-0"
+                                title="Create link"
+                              >
+                                {acceptingSuggestionId === suggestion.memory_id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Plus className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+
               {/* Future Sections (Placeholders) */}
               <div className="space-y-3 pt-4 border-t">
                 <div className="flex items-center gap-2 text-muted-foreground/60">
                   <Lightbulb className="h-4 w-4" />
                   <span className="text-sm">Insights</span>
-                  <span className="text-xs bg-muted px-2 py-0.5 rounded-full ml-auto">
-                    Coming Soon
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-muted-foreground/60">
-                  <Network className="h-4 w-4" />
-                  <span className="text-sm">Similar Memories</span>
                   <span className="text-xs bg-muted px-2 py-0.5 rounded-full ml-auto">
                     Coming Soon
                   </span>
@@ -1844,6 +2112,17 @@ export function MemoryDetailPanel({
           </div>
         )}
       </div>
+
+      {/* Link Memory Dialog */}
+      {memoryId && (
+        <LinkMemoryDialog
+          isOpen={showLinkDialog}
+          onClose={() => setShowLinkDialog(false)}
+          currentMemoryId={memoryId}
+          onLinkCreated={handleLinkCreated}
+          existingLinks={links.map(link => link.memory_id)}
+        />
+      )}
     </div>,
     document.body
   );
