@@ -209,7 +209,7 @@ export async function getGraphData(filters: GraphFilters = {}): Promise<GraphDat
   const params = new URLSearchParams();
 
   if (filters.type && filters.type !== "all") {
-    params.append("type", filters.type);
+    params.append("memory_type", filters.type);
   }
   if (filters.date_range && filters.date_range !== "all") {
     params.append("date_range", filters.date_range);
