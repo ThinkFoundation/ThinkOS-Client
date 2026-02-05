@@ -4,8 +4,12 @@ import { viteStaticCopy } from 'vite-plugin-static-copy';
 import path from 'path';
 import { createRequire } from 'module';
 import fs from 'fs';
+import { execSync } from 'child_process';
 
 const require = createRequire(import.meta.url);
+
+// Parse changelog at build time
+execSync('node scripts/parse-changelog.js', { cwd: __dirname, stdio: 'inherit' });
 
 // Resolve pdfjs-dist worker path dynamically (works with pnpm)
 // Normalize to forward slashes for cross-platform compatibility with vite-plugin-static-copy
