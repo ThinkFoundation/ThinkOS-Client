@@ -185,6 +185,32 @@
   .chat-prose blockquote {
     @apply border-l-2 border-primary/50 pl-3 italic my-2;
   }
+
+  /* Changelog markdown prose styling */
+  .changelog-prose {
+    line-height: 1.6;
+  }
+  .changelog-prose p {
+    margin: 0.375em 0;
+  }
+  .changelog-prose p:first-child {
+    margin-top: 0;
+  }
+  .changelog-prose ul {
+    margin: 0.375em 0;
+    padding-left: 1.25em;
+    list-style-type: disc;
+  }
+  .changelog-prose li {
+    margin: 0.25em 0;
+  }
+  .changelog-prose code {
+    @apply bg-black/10 dark:bg-white/10 px-1 py-0.5 rounded text-[0.85em] font-mono;
+  }
+  .changelog-prose strong {
+    font-weight: 600;
+    color: hsl(var(--foreground));
+  }
 }
 
 /* TipTap Editor prose styling - OUTSIDE @layer to prevent Tailwind purging */
