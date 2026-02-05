@@ -46,3 +46,6 @@ app/public/ffmpeg/
 
 # PDF.js worker (copied by vite config at build time)
 app/public/pdf.worker.min.mjs
+
+# Generated changelog (parsed from CHANGELOG.md at build time)
+app/src/data/changelog.json

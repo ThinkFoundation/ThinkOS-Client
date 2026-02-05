@@ -1,5 +1,11 @@
 # think-app
 
+## 0.7.1
+
+### Patch Changes
+
+- 820890f: Add in-app changelog viewer with version display in sidebar
+
 ## 0.7.0
 
 ### Minor Changes

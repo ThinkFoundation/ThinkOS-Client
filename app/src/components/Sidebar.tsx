@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { Home, Brain, Settings, MessageSquare, Network } from "lucide-react";
 import ProviderStatusIndicator from "./ProviderStatusIndicator";
+import { ChangelogDialog } from "./ChangelogDialog";
 import { useConversation } from "@/contexts/ConversationContext";
 import { sidebar } from "@/lib/design-tokens";
 import { cn } from "@/lib/utils";
@@ -9,6 +11,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import changelog from "@/data/changelog.json";
 
 const navItems = [
   { to: "/", icon: Home, label: "Home" },
@@ -20,6 +23,8 @@ const navItems = [
 
 export default function Sidebar() {
   const { startNewChat } = useConversation();
+  const [showChangelog, setShowChangelog] = useState(false);
+  const currentVersion = (changelog as { version: string }[])[0]?.version ?? "0.0.0";
 
   const handleNavClick = (to: string) => {
     if (to === "/") {
@@ -77,6 +82,21 @@ export default function Sidebar() {
       </nav>
 
       <ProviderStatusIndicator />
+
+      {/* Version footer */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={() => setShowChangelog(true)}
+            className="px-2 py-2 text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+          >
+            v{currentVersion}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right">View changelog</TooltipContent>
+      </Tooltip>
+
+      <ChangelogDialog open={showChangelog} onOpenChange={setShowChangelog} />
     </aside>
   );
 }
