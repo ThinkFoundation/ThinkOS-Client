@@ -414,7 +414,7 @@ export function MemoryDetailPanel({
   };
 
   const handleAcceptSuggestion = async (suggestion: MemorySuggestion) => {
-    if (!memoryId) return;
+    if (!memoryId || !memory) return;
 
     setAcceptingSuggestionId(suggestion.memory_id);
     try {
@@ -432,6 +432,9 @@ export function MemoryDetailPanel({
 
       // Refresh links
       fetchLinks(memoryId);
+
+      // Notify parent to refresh graph
+      onMemoryUpdated(memory);
     } catch (err) {
       console.error("Failed to accept suggestion:", err);
       toast.error("Failed to create link");
@@ -441,12 +444,14 @@ export function MemoryDetailPanel({
   };
 
   const handleDeleteLink = async (targetId: number) => {
-    if (!memoryId) return;
+    if (!memoryId || !memory) return;
     try {
       await deleteLink(memoryId, targetId);
       toast.success("Link removed");
       // Refresh links
       fetchLinks(memoryId);
+      // Notify parent to refresh graph
+      onMemoryUpdated(memory);
     } catch (err) {
       console.error("Failed to delete link:", err);
       toast.error("Failed to remove link");
@@ -456,6 +461,10 @@ export function MemoryDetailPanel({
   const handleLinkCreated = () => {
     if (memoryId) {
       fetchLinks(memoryId);
+      // Notify parent to refresh graph
+      if (memory) {
+        onMemoryUpdated(memory);
+      }
     }
   };
 
@@ -1914,15 +1923,29 @@ export function MemoryDetailPanel({
                       </span>
                     )}
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowLinkDialog(true)}
-                    className="h-7 px-2"
-                  >
-                    <LinkIcon className="h-3.5 w-3.5 mr-1.5" />
-                    Link Memory
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        navigate(`/graph?focus=${memoryId}`);
+                        onClose();
+                      }}
+                      className="h-7 px-2"
+                      title="View in graph"
+                    >
+                      <Network className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowLinkDialog(true)}
+                      className="h-7 px-2"
+                    >
+                      <LinkIcon className="h-3.5 w-3.5 mr-1.5" />
+                      Link Memory
+                    </Button>
+                  </div>
                 </div>
 
                 {isLoadingLinks ? (

@@ -1,12 +1,17 @@
 """CRUD operations for memory links (knowledge graph)."""
 
+import logging
 from datetime import datetime
+from typing import List, Dict, Tuple, Any
 from sqlalchemy import select, and_, or_
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from fastapi import HTTPException
 
 from ..core import get_session_maker, run_sync
 from ...models import Memory, MemoryLink
 from ...events import event_manager, MemoryEvent, EventType
+
+logger = logging.getLogger(__name__)
 
 
 async def create_link(
@@ -249,3 +254,109 @@ async def get_linked_memory_ids(memory_id: int) -> list[int]:
             return list(links)
 
     return await run_sync(_get)
+
+
+async def batch_create_links(
+    link_pairs: List[Tuple[int, int, float]]
+) -> Dict[str, Any]:
+    """
+    Efficiently create multiple links in a single transaction.
+
+    Creates bidirectional links (both source->target and target->source).
+
+    Args:
+        link_pairs: List of (source_id, target_id, confidence) tuples
+
+    Returns:
+        {
+            "created": int,  # Number of successfully created link pairs
+            "failed": int,   # Number of failed link pairs
+            "errors": [str]  # List of error messages
+        }
+    """
+    def _create():
+        created = 0
+        failed = 0
+        errors = []
+
+        with get_session_maker()() as session:
+            for source_id, target_id, confidence in link_pairs:
+                try:
+                    # Check if link already exists (either direction)
+                    existing_query = (
+                        select(MemoryLink)
+                        .where(
+                            or_(
+                                and_(
+                                    MemoryLink.source_memory_id == source_id,
+                                    MemoryLink.target_memory_id == target_id
+                                ),
+                                and_(
+                                    MemoryLink.source_memory_id == target_id,
+                                    MemoryLink.target_memory_id == source_id
+                                )
+                            )
+                        )
+                    )
+                    existing = session.execute(existing_query).scalar_one_or_none()
+
+                    if existing:
+                        errors.append(f"Link between {source_id} and {target_id} already exists")
+                        failed += 1
+                        continue
+
+                    # Verify both memories exist
+                    source_exists = session.get(Memory, source_id) is not None
+                    target_exists = session.get(Memory, target_id) is not None
+
+                    if not source_exists:
+                        errors.append(f"Source memory {source_id} does not exist")
+                        failed += 1
+                        continue
+
+                    if not target_exists:
+                        errors.append(f"Target memory {target_id} does not exist")
+                        failed += 1
+                        continue
+
+                    # Create bidirectional links
+                    # Link 1: source -> target
+                    link1 = MemoryLink(
+                        source_memory_id=source_id,
+                        target_memory_id=target_id,
+                        link_type="auto",
+                        relevance_score=confidence
+                    )
+                    session.add(link1)
+
+                    # Link 2: target -> source (bidirectional)
+                    link2 = MemoryLink(
+                        source_memory_id=target_id,
+                        target_memory_id=source_id,
+                        link_type="auto",
+                        relevance_score=confidence
+                    )
+                    session.add(link2)
+
+                    created += 1
+
+                except IntegrityError as e:
+                    logger.error(f"Link constraint violation {source_id}-{target_id}: {e}")
+                    errors.append(f"Link already exists: {source_id}-{target_id}")
+                    failed += 1
+                except SQLAlchemyError as e:
+                    logger.error(f"Database error creating link {source_id}-{target_id}: {e}")
+                    errors.append(f"Database error: {str(e)}")
+                    failed += 1
+
+            # Commit all changes
+            if created > 0:
+                session.commit()
+
+        return {
+            "created": created,
+            "failed": failed,
+            "errors": errors
+        }
+
+    return await run_sync(_create)

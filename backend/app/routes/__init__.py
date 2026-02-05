@@ -10,6 +10,9 @@ from .media import router as media_router
 from .video import router as video_router
 from .document import router as document_router
 from .links import router as links_router
+from .graph import router as graph_router
+from .analytics import router as analytics_router
+from .insights import router as insights_router
 
 router = APIRouter()
 router.include_router(auth_router)
@@ -22,3 +25,6 @@ router.include_router(media_router)
 router.include_router(video_router)
 router.include_router(document_router)
 router.include_router(links_router)
+router.include_router(graph_router)
+router.include_router(analytics_router)
+router.include_router(insights_router)

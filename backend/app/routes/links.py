@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from ..db.crud.links import create_link, delete_link, get_memory_links
+from ..services.cache import invalidate_analytics_cache
 from ..services.links.suggestions import get_link_suggestions
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,11 @@ async def create_memory_link(memory_id: int, request: CreateLinkRequest):
             link_type=request.link_type,
             relevance_score=request.relevance_score,
         )
+        # Invalidate analytics cache since graph structure changed
+        try:
+            invalidate_analytics_cache()
+        except Exception:
+            pass  # Cache invalidation failure shouldn't break link operations
         return link
     except HTTPException:
         raise
@@ -91,6 +97,11 @@ async def delete_memory_link(memory_id: int, target_id: int):
     """
     try:
         await delete_link(source_id=memory_id, target_id=target_id)
+        # Invalidate analytics cache since graph structure changed
+        try:
+            invalidate_analytics_cache()
+        except Exception:
+            pass  # Cache invalidation failure shouldn't break link operations
         return {"success": True}
     except HTTPException:
         raise

@@ -6,6 +6,7 @@ import MainLayout from "./layouts/MainLayout";
 import HomePage from "./pages/HomePage";
 import ChatPage from "./pages/ChatPage";
 import MemoriesPage from "./pages/MemoriesPage";
+import GraphPage from "./pages/GraphPage";
 import SettingsPage from "./pages/SettingsPage";
 import RecordingPage from "./pages/RecordingPage";
 import { NamePromptDialog } from "./components/NamePromptDialog";
@@ -283,6 +284,7 @@ function App() {
             <Route path="/" element={<HomePage userName={userName} />} />
             <Route path="/memories" element={<MemoriesPage />} />
             <Route path="/chat" element={<ChatPage />} />
+            <Route path="/graph" element={<GraphPage />} />
             <Route
               path="/settings"
               element={<SettingsPage onNameChange={setUserName} />}
