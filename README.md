@@ -1,8 +1,12 @@
-# Think
+# ThinkOS Client
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-Personal AI assistant for saving and chatting with web content.
+ThinkOS is an open-source, local-first application that serves as the user interface layer for AI agent servers. Where frameworks like OpenClaw provide the agent engine, ThinkOS provides the experience — a unified dashboard for managing agents, tasks, and personal knowledge, with your data stored entirely on your own device.
+
+Built for users who want the full power of modern agentic AI without sacrificing privacy or control, ThinkOS supports any OpenAI-compatible model provider (Ollama, Claude, GPT, and more) and features a sandboxed plugin architecture that prevents third-party extensions from exfiltrating your data.
+
+ThinkOS is free, self-hosted, and open source. Contributions welcome.
 
 ![Think App Screenshot](screenshot.png)
 
