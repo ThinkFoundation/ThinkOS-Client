@@ -36,6 +36,10 @@ async def setup_password(request: SetPasswordRequest):
     set_video_encryption_key(request.password)
     set_document_encryption_key(request.password)
 
+    # Start trigger evaluator
+    from ..services.skills.triggers import trigger_evaluator
+    await trigger_evaluator.start()
+
     return {"success": True}
 
 
@@ -58,12 +62,20 @@ async def unlock(request: UnlockRequest):
     set_video_encryption_key(request.password)
     set_document_encryption_key(request.password)
 
+    # Start trigger evaluator
+    from ..services.skills.triggers import trigger_evaluator
+    await trigger_evaluator.start()
+
     return {"success": True}
 
 
 @router.post("/auth/logout")
 async def logout():
     """Lock the database (logout)."""
+    # Stop trigger evaluator before closing DB
+    from ..services.skills.triggers import trigger_evaluator
+    await trigger_evaluator.stop()
+
     reset_db_connection()
     # Clear media encryption keys
     clear_audio_encryption_key()

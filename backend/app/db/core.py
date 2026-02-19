@@ -111,11 +111,13 @@ async def init_db(db_key: str):
             return
 
         from .migrations import run_migrations
+        from ..services.skills.registry import seed_builtin_skills
 
         with _engine.connect() as connection:
             applied = run_migrations(connection)
             for version, desc in applied:
                 print(f"Applied migration {version}: {desc}")
+            seed_builtin_skills(connection)
 
     await run_sync(setup_database)
 

@@ -13,6 +13,7 @@ from .links import router as links_router
 from .graph import router as graph_router
 from .analytics import router as analytics_router
 from .insights import router as insights_router
+from .skills import router as skills_router
 
 router = APIRouter()
 router.include_router(auth_router)
@@ -28,3 +29,4 @@ router.include_router(links_router)
 router.include_router(graph_router)
 router.include_router(analytics_router)
 router.include_router(insights_router)
+router.include_router(skills_router)

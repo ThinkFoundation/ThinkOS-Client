@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Home, Brain, Settings, MessageSquare, Network } from "lucide-react";
+import { Home, Brain, Settings, MessageSquare, Network, Zap } from "lucide-react";
 import ProviderStatusIndicator from "./ProviderStatusIndicator";
 import { ChangelogDialog } from "./ChangelogDialog";
 import { useConversation } from "@/contexts/ConversationContext";
@@ -18,6 +18,7 @@ const navItems = [
   { to: "/memories", icon: Brain, label: "Memories" },
   { to: "/chat", icon: MessageSquare, label: "Chats" },
   { to: "/graph", icon: Network, label: "Graph" },
+  { to: "/skills", icon: Zap, label: "Skills" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 

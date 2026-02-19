@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+
+  "id": "a1b2c3d4-0001-4000-a000-000000000001",
+  "name": "Extract Action Items",
+  "description": "Pull todos, decisions, and follow-ups from meeting notes or any text containing tasks",
+  "icon": "\u2705",
+  "logo": null,
+  "version": "1.0.0",
+  "category": "productivity",
+  "tags": ["meetings", "todos", "action-items"],
+
+  "author": {
+    "name": "ThinkOS Team",
+    "url": "https://github.com/ThinkFoundation"
+  },
+
+  "input": {
+    "type": "single_memory",
+    "accepts": ["web", "note", "voice_memo", "audio", "video", "document"]
+  },
+
+  "parameters": [
+    {
+      "id": "format",
+      "label": "Output Format",
+      "description": "How the extracted action items should be organized in the output",
+      "type": "select",
+      "options": ["grouped", "flat", "by-person"],
+      "default": "grouped"
+    },
+    {
+      "id": "include_deadlines",
+      "label": "Extract Deadlines",
+      "description": "Attempt to identify and include deadlines mentioned for each item",
+      "type": "boolean",
+      "default": true
+    }
+  ],
+
+  "prompt": {
+    "system": "You are a precise assistant that extracts action items from text. For each item identify: the task, the responsible person (if mentioned), the deadline (if mentioned), and the priority (high/medium/low, only if clearly inferrable). Be thorough but never invent items that aren't stated or clearly implied. Output as clean Markdown.",
+    "user_template": "Extract all action items from the following content.\n\nOutput format: {{format}}\nInclude deadlines: {{include_deadlines}}\n\n---\n\n{{content}}"
+  },
+
+  "output": {
+    "format": "markdown"
+  },
+
+  "triggers": {
+    "chat": {
+      "patterns": ["action items", "todos", "aufgaben", "next steps", "follow-ups"],
+      "intent_description": "User wants to extract tasks or action items from content",
+      "auto_parameters": {
+        "format": "grouped",
+        "include_deadlines": true
+      }
+    },
+    "auto": {
+      "suggested_rules": [
+        {
+          "name": "Meeting Notes \u2192 Action Items",
+          "description": "Automatically extract action items when meeting notes are saved",
+          "conditions": {
+            "operator": "AND",
+            "rules": [
+              { "field": "detected_type", "operator": "equals", "value": "meeting_notes" }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

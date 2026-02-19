@@ -474,3 +474,432 @@ export async function batchCreateLinks(
 
   return response.json();
 }
+
+// ============================================================================
+// Skills API
+// ============================================================================
+
+export interface SkillParameter {
+  id: string;
+  label: string;
+  description?: string;
+  type: "select" | "boolean" | "string" | "number";
+  options?: string[];
+  default: unknown;
+}
+
+export interface Skill {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  logo: string | null;
+  version: string;
+  category: string;
+  tags: string[];
+  parameters: SkillParameter[];
+  input: {
+    type: string;
+    accepts: string[] | null;
+  };
+  prompt?: {
+    system: string;
+    user_template: string;
+  };
+  source?: string;
+  hidden?: boolean;
+  author_name?: string | null;
+  author_url?: string | null;
+  output_format?: string;
+  created_at?: string;
+  updated_at?: string;
+  triggers?: SkillTrigger[];
+}
+
+export interface SkillExecution {
+  id: number;
+  skill_id: string;
+  skill_name: string;
+  skill_icon: string;
+  skill_logo: string | null;
+  memory_id: number;
+  trigger_type: string;
+  parameters: Record<string, unknown> | null;
+  status: "running" | "completed" | "failed";
+  result: string | null;
+  error: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface SkillExecuteRequest {
+  skill_id: string;
+  memory_id: number;
+  parameters?: Record<string, unknown>;
+}
+
+export async function getSkills(): Promise<Skill[]> {
+  const response = await apiFetch("/api/skills");
+  if (!response.ok) {
+    throw new Error("Failed to fetch skills");
+  }
+  return response.json();
+}
+
+export async function getSkillWithPrompt(skillId: string): Promise<Skill> {
+  const response = await apiFetch(`/api/skills/${skillId}`);
+  if (!response.ok) {
+    throw new Error("Failed to fetch skill details");
+  }
+  return response.json();
+}
+
+export async function toggleSkillVisibility(
+  skillId: string,
+  hidden: boolean
+): Promise<void> {
+  const response = await apiFetch(`/api/skills/${skillId}/visibility`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ hidden }),
+  });
+  if (!response.ok) {
+    throw new Error("Failed to update skill visibility");
+  }
+}
+
+export async function getSkillExecutions(
+  memoryId: number
+): Promise<SkillExecution[]> {
+  const response = await apiFetch(
+    `/api/skills/executions?memory_id=${memoryId}`
+  );
+  if (!response.ok) {
+    throw new Error("Failed to fetch skill executions");
+  }
+  return response.json();
+}
+
+// ============================================================================
+// Skills API — Phase 2 Extensions
+// ============================================================================
+
+export interface SkillListItem extends Skill {
+  source: "builtin" | "user";
+  hidden: boolean;
+  execution_count: number;
+  last_executed_at: string | null;
+  author_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SkillCreateRequest {
+  name: string;
+  description: string;
+  icon: string;
+  logo?: string | null;
+  category: string;
+  tags: string[];
+  input_type: string;
+  input_accepts: string[] | null;
+  parameters: SkillParameter[];
+  prompt_system: string;
+  prompt_user_template: string;
+  output_format?: string;
+  author_name?: string | null;
+  author_url?: string | null;
+}
+
+export type SkillUpdateRequest = Partial<SkillCreateRequest>;
+
+export interface SkillTestRequest {
+  memory_id: number;
+  prompt_system: string;
+  prompt_user_template: string;
+  parameters: SkillParameter[] | null;
+  parameter_values: Record<string, unknown>;
+  input_accepts: string[] | null;
+  output_format?: string;
+}
+
+export interface SkillValidationResult {
+  valid: boolean;
+  errors?: string[];
+  warnings?: string[];
+  parsed?: { name: string; id: string } | null;
+}
+
+export interface SkillImportRequest {
+  definition: string;
+  conflict_resolution: "replace" | "copy";
+}
+
+export interface ExecutionHistoryItem extends SkillExecution {
+  memory_title: string;
+  memory_type: string;
+  duration_seconds: number | null;
+}
+
+export interface ExecutionHistoryResponse {
+  executions: ExecutionHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SkillsListFilters {
+  include_hidden?: boolean;
+  source?: "builtin" | "user";
+  category?: string;
+  search?: string;
+}
+
+export interface ExecutionHistoryFilters {
+  skill_id?: string;
+  memory_id?: number;
+  status?: "completed" | "failed";
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export async function getSkillsList(
+  filters: SkillsListFilters = {}
+): Promise<SkillListItem[]> {
+  const params = new URLSearchParams();
+  if (filters.include_hidden) params.set("include_hidden", "true");
+  if (filters.source) params.set("source", filters.source);
+  if (filters.category) params.set("category", filters.category);
+  if (filters.search) params.set("search", filters.search);
+  const response = await apiFetch(`/api/skills?${params}`);
+  if (!response.ok) throw new Error("Failed to fetch skills");
+  return response.json();
+}
+
+export async function createSkill(
+  data: SkillCreateRequest
+): Promise<SkillListItem> {
+  const response = await apiFetch("/api/skills", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Failed to create skill" }));
+    throw new ApiError(error.detail || "Failed to create skill", response.status);
+  }
+  return response.json();
+}
+
+export async function updateSkill(
+  id: string,
+  data: SkillUpdateRequest
+): Promise<SkillListItem> {
+  const response = await apiFetch(`/api/skills/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Failed to update skill" }));
+    throw new ApiError(error.detail || "Failed to update skill", response.status);
+  }
+  return response.json();
+}
+
+export async function deleteSkill(id: string): Promise<void> {
+  const response = await apiFetch(`/api/skills/${id}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Failed to delete skill" }));
+    throw new ApiError(error.detail || "Failed to delete skill", response.status);
+  }
+}
+
+export async function validateSkillDefinition(
+  definition: string
+): Promise<SkillValidationResult> {
+  const response = await apiFetch("/api/skills/validate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ definition }),
+  });
+  if (!response.ok) throw new Error("Failed to validate skill");
+  return response.json();
+}
+
+export async function importSkill(
+  req: SkillImportRequest
+): Promise<SkillListItem> {
+  const response = await apiFetch("/api/skills/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Failed to import skill" }));
+    throw new ApiError(error.detail?.message || error.detail || "Failed to import skill", response.status);
+  }
+  return response.json();
+}
+
+export async function exportSkill(id: string): Promise<Blob> {
+  const response = await apiFetch(`/api/skills/${id}/export`);
+  if (!response.ok) throw new Error("Failed to export skill");
+  return response.blob();
+}
+
+export async function getExecutionHistory(
+  filters: ExecutionHistoryFilters = {}
+): Promise<ExecutionHistoryResponse> {
+  const params = new URLSearchParams();
+  if (filters.skill_id) params.set("skill_id", filters.skill_id);
+  if (filters.memory_id) params.set("memory_id", String(filters.memory_id));
+  if (filters.status) params.set("status", filters.status);
+  if (filters.search) params.set("search", filters.search);
+  if (filters.limit) params.set("limit", String(filters.limit));
+  if (filters.offset) params.set("offset", String(filters.offset));
+  const response = await apiFetch(`/api/skills/executions?${params}`);
+  if (!response.ok) throw new Error("Failed to fetch execution history");
+  return response.json();
+}
+
+// ============================================================================
+// Skill Triggers API (Phase 3)
+// ============================================================================
+
+export interface TriggerRule {
+  field: string;
+  op: string;
+  value: string | number | boolean;
+}
+
+export interface TriggerConditions {
+  operator: "AND" | "OR";
+  rules: TriggerRule[];
+}
+
+export interface SkillTrigger {
+  id: number;
+  skill_id: string;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  event_type: string;
+  conditions: TriggerConditions;
+  parameters: Record<string, unknown> | null;
+  execution_count: number;
+  last_triggered_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TriggerCreateRequest {
+  name: string;
+  description?: string;
+  event_type?: string;
+  conditions: TriggerConditions;
+  parameters?: Record<string, unknown>;
+}
+
+export interface TriggerUpdateRequest {
+  name?: string;
+  description?: string;
+  conditions?: TriggerConditions;
+  parameters?: Record<string, unknown>;
+  enabled?: boolean;
+}
+
+export interface TriggerPreviewResult {
+  matching_count: number;
+  matching_memories: Array<{
+    id: number;
+    title: string | null;
+    type: string;
+    tags: string[];
+  }>;
+  total_memories: number;
+}
+
+export async function getTriggers(skillId: string): Promise<SkillTrigger[]> {
+  const response = await apiFetch(`/api/skills/${skillId}/triggers`);
+  if (!response.ok) throw new Error("Failed to fetch triggers");
+  return response.json();
+}
+
+export async function createTrigger(
+  skillId: string,
+  data: TriggerCreateRequest
+): Promise<SkillTrigger> {
+  const response = await apiFetch(`/api/skills/${skillId}/triggers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const error = await response
+      .json()
+      .catch(() => ({ detail: "Failed to create trigger" }));
+    throw new ApiError(
+      error.detail || "Failed to create trigger",
+      response.status
+    );
+  }
+  return response.json();
+}
+
+export async function updateTrigger(
+  triggerId: number,
+  data: TriggerUpdateRequest
+): Promise<SkillTrigger> {
+  const response = await apiFetch(`/api/skills/triggers/${triggerId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const error = await response
+      .json()
+      .catch(() => ({ detail: "Failed to update trigger" }));
+    throw new ApiError(
+      error.detail || "Failed to update trigger",
+      response.status
+    );
+  }
+  return response.json();
+}
+
+export async function deleteTrigger(triggerId: number): Promise<void> {
+  const response = await apiFetch(`/api/skills/triggers/${triggerId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) throw new Error("Failed to delete trigger");
+}
+
+export async function toggleTriggerEnabled(
+  triggerId: number,
+  enabled: boolean
+): Promise<SkillTrigger> {
+  const response = await apiFetch(`/api/skills/triggers/${triggerId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!response.ok) throw new Error("Failed to toggle trigger");
+  return response.json();
+}
+
+export async function previewTrigger(
+  conditions: TriggerConditions
+): Promise<TriggerPreviewResult> {
+  const response = await apiFetch("/api/skills/triggers/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ conditions }),
+  });
+  if (!response.ok) throw new Error("Failed to preview trigger");
+  return response.json();
+}

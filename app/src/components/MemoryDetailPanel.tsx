@@ -21,7 +21,6 @@ import {
   Trash2,
   Link as LinkIcon,
   Sparkles,
-  Lightbulb,
   Network,
   Play,
   Pause,
@@ -35,6 +34,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
+  Zap,
 } from "lucide-react";
 
 // Set up PDF.js worker - served from public folder (dev) or copied to dist (build)
@@ -50,6 +50,7 @@ import { API_BASE_URL } from "@/constants";
 import { useMemoryEvents } from "../hooks/useMemoryEvents";
 import { useConversation } from "../contexts/ConversationContext";
 import { LinkMemoryDialog } from "./LinkMemoryDialog";
+import { SkillRunner, SkillResultsSection } from "./SkillRunner";
 import type { TranscriptionStatus, TranscriptSegment, VideoProcessingStatus } from "@/types/chat";
 
 interface MemoryTag {
@@ -164,6 +165,10 @@ export function MemoryDetailPanel({
   const [isLoadingLinks, setIsLoadingLinks] = useState(false);
   const [showLinkDialog, setShowLinkDialog] = useState(false);
 
+  // Skill runner state
+  const [showSkillRunner, setShowSkillRunner] = useState(false);
+  const [initialExecutionId, setInitialExecutionId] = useState<number | null>(null);
+
   // Suggestions state
   const [suggestions, setSuggestions] = useState<MemorySuggestion[]>([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
@@ -206,6 +211,8 @@ export function MemoryDetailPanel({
     if (memoryId && isOpen) {
       fetchMemory(memoryId);
       fetchSuggestions(memoryId);
+      setShowSkillRunner(false);
+      setInitialExecutionId(null);
     }
   }, [memoryId, isOpen]);
 
@@ -1044,21 +1051,44 @@ export function MemoryDetailPanel({
           isOpen ? "translate-x-0" : "translate-x-full"
         )}
       >
-        {/* Close button */}
-        <div className="flex justify-end px-4 py-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            className="h-8 w-8"
-          >
-            <X className="h-4 w-4" />
-          </Button>
+        {/* Toolbar */}
+        <div className="flex justify-between items-center px-4 py-3">
+          <div />
+          <div className="flex items-center gap-1.5">
+            {!showSkillRunner && memory && (
+              <button
+                onClick={() => setShowSkillRunner(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl bg-primary/5 hover:bg-primary/10 border border-primary/20 text-foreground hover:shadow-sm hover:shadow-primary/10 transition-all duration-200"
+              >
+                <Zap className="h-3.5 w-3.5 text-primary" />
+                Skills
+              </button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="h-8 w-8"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
-          {isLoading ? (
+          {showSkillRunner && memory ? (
+            <SkillRunner
+              memoryId={memory.id}
+              memory={memory}
+              onClose={() => {
+                setShowSkillRunner(false);
+                setInitialExecutionId(null);
+              }}
+              formatDate={formatDate}
+              initialExecutionId={initialExecutionId}
+            />
+          ) : isLoading ? (
             <div className="p-6 space-y-4">
               <div className="animate-pulse space-y-4">
                 <div className="h-6 bg-muted rounded w-3/4" />
@@ -1801,6 +1831,16 @@ export function MemoryDetailPanel({
                 </div>
               )}
 
+              {/* Skill Results */}
+              <SkillResultsSection
+                memoryId={memory.id}
+                formatDate={formatDate}
+                onViewExecution={(executionId) => {
+                  setInitialExecutionId(executionId);
+                  setShowSkillRunner(true);
+                }}
+              />
+
               {/* Summary Section */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -2079,16 +2119,6 @@ export function MemoryDetailPanel({
                 )}
               </div>
 
-              {/* Future Sections (Placeholders) */}
-              <div className="space-y-3 pt-4 border-t">
-                <div className="flex items-center gap-2 text-muted-foreground/60">
-                  <Lightbulb className="h-4 w-4" />
-                  <span className="text-sm">Insights</span>
-                  <span className="text-xs bg-muted px-2 py-0.5 rounded-full ml-auto">
-                    Coming Soon
-                  </span>
-                </div>
-              </div>
             </div>
           ) : (
             <div className="p-6 text-center text-muted-foreground">

@@ -16,10 +16,13 @@ from ..services.ai.suggestions import get_quick_prompts, generate_followup_sugge
 from ..services.query.special_handlers import is_special_prompt, execute_special_handler
 from ..services.embeddings.filtering import filter_memories_dynamically, format_memories_as_context, compute_context_budget
 from ..db.search import search_similar_memories
+from pydantic import BaseModel
 from ..schemas import ChatRequest
 from .. import config
 from ..db.crud import create_conversation, add_message, update_conversation_title, get_conversation, get_memory
 from ..events import event_manager, MemoryEvent, EventType
+from ..services.skills.chat_suggestions import detect_skill_suggestions
+from ..services.skills.executor import execute_skill
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +85,7 @@ async def _retrieve_context(
                     "id": memory["id"],
                     "title": memory["title"],
                     "url": memory.get("url"),
+                    "type": memory.get("type"),
                 })
 
         if attached_memories:
@@ -140,6 +144,7 @@ async def _retrieve_context(
                             "id": m["id"],
                             "title": m["title"],
                             "url": m.get("url"),
+                            "type": m.get("type"),
                             "distance": m.get("distance"),
                             "match_type": m.get("match_type", "vector"),
                             "rrf_score": m.get("rrf_score"),
@@ -295,12 +300,15 @@ async def chat_stream(request: ChatRequest):
     # RAG: Retrieve relevant memories
     context, sources = await _retrieve_context(request.message, history, request.attached_memory_ids, skip_rag=request.skip_memory_context)
 
+    # Detect skill suggestions based on message patterns and context
+    skill_suggestions = await detect_skill_suggestions(request.message, sources)
+
     async def generate():
         full_response = ""
         usage_data = None
 
-        # Send metadata first (conversation_id, sources)
-        yield f"data: {json.dumps({'type': 'meta', 'conversation_id': conversation_id, 'sources': sources, 'searched': not request.skip_memory_context})}\n\n"
+        # Send metadata first (conversation_id, sources, skill suggestions)
+        yield f"data: {json.dumps({'type': 'meta', 'conversation_id': conversation_id, 'sources': sources, 'searched': not request.skip_memory_context, 'skill_suggestions': skill_suggestions})}\n\n"
 
         try:
             async for token, usage in ai_chat_stream(request.message, context=context, history=history):
@@ -352,4 +360,69 @@ async def chat_stream(request: ChatRequest):
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
         }
+    )
+
+
+# ---------------------------------------------------------------------------
+# Chat Skill Execution
+# ---------------------------------------------------------------------------
+
+class ChatSkillExecuteRequest(BaseModel):
+    conversation_id: int
+    skill_id: str
+    memory_id: int
+    parameters: dict | None = None
+
+
+@router.post("/chat/execute-skill")
+async def chat_execute_skill(request: ChatSkillExecuteRequest):
+    """Execute a skill from chat context. Creates execution record and saves result as chat message."""
+    conversation = await get_conversation(request.conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    async def generate():
+        full_result = ""
+        execution_id = None
+        skill_name = None
+        skill_icon = None
+
+        async for event in execute_skill(
+            skill_id=request.skill_id,
+            memory_id=request.memory_id,
+            parameters=request.parameters,
+            trigger_type="chat",
+        ):
+            # Capture metadata from meta event
+            if event.get("type") == "meta" and "content_source" in event:
+                execution_id = event.get("execution_id")
+                skill_name = event.get("skill_name")
+
+            if event.get("type") == "token":
+                full_result += event["content"]
+
+            if event.get("type") == "done":
+                # Save as chat message with metadata
+                metadata = json.dumps({
+                    "skill_execution_id": execution_id,
+                    "skill_id": request.skill_id,
+                    "skill_name": skill_name,
+                    "memory_id": request.memory_id,
+                })
+                await add_message(
+                    request.conversation_id,
+                    "assistant",
+                    full_result,
+                    metadata=metadata,
+                )
+
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
     )

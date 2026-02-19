@@ -100,6 +100,7 @@ class Message(Base):
     prompt_tokens: Mapped[int | None] = mapped_column(nullable=True)
     completion_tokens: Mapped[int | None] = mapped_column(nullable=True)
     total_tokens: Mapped[int | None] = mapped_column(nullable=True)
+    msg_metadata: Mapped[str | None] = mapped_column("metadata", Text, nullable=True)  # JSON: skill execution metadata
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
     sources: Mapped[list["MessageSource"]] = relationship(back_populates="message", cascade="all, delete-orphan")
@@ -147,3 +148,64 @@ class MemoryLink(Base):
 
     source_memory: Mapped["Memory"] = relationship(foreign_keys=[source_memory_id])
     target_memory: Mapped["Memory"] = relationship(foreign_keys=[target_memory_id])
+
+
+class Skill(Base):
+    __tablename__ = "skills"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    schema_version: Mapped[int] = mapped_column(default=1)
+    name: Mapped[str] = mapped_column(String(60))
+    description: Mapped[str] = mapped_column(String(200))
+    icon: Mapped[str] = mapped_column(String(10))
+    logo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    version: Mapped[str] = mapped_column(String(20))
+    category: Mapped[str] = mapped_column(String(20), default="custom")
+    tags: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array
+    author_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    author_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    input_type: Mapped[str] = mapped_column(String(20), default="single_memory")
+    input_accepts: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array
+    parameters: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array
+    prompt_system: Mapped[str] = mapped_column(Text)
+    prompt_user_template: Mapped[str] = mapped_column(Text)
+    output_format: Mapped[str] = mapped_column(String(20), default="markdown")
+    triggers: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON, Phase 1 ignored
+    source: Mapped[str] = mapped_column(String(10))  # "builtin" | "user"
+    hidden: Mapped[bool] = mapped_column(default=False)
+    definition: Mapped[str] = mapped_column(Text)  # Raw .think-skill JSON
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SkillExecution(Base):
+    __tablename__ = "skill_executions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    skill_id: Mapped[str] = mapped_column(ForeignKey("skills.id", ondelete="CASCADE"))
+    memory_id: Mapped[int] = mapped_column(ForeignKey("memories.id", ondelete="CASCADE"))
+    trigger_type: Mapped[str] = mapped_column(String(20))  # Phase 1: always "manual"
+    parameters: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
+    status: Mapped[str] = mapped_column(String(20))  # "running" | "completed" | "failed"
+    result: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class SkillTrigger(Base):
+    __tablename__ = "skill_triggers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    skill_id: Mapped[str] = mapped_column(ForeignKey("skills.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    enabled: Mapped[bool] = mapped_column(default=True)
+    event_type: Mapped[str] = mapped_column(String(20), default="on_save")
+    conditions: Mapped[str] = mapped_column(Text)  # JSON
+    parameters: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
+    execution_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_triggered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

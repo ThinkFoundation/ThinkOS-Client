@@ -4,6 +4,7 @@ import { AlertCircle } from "lucide-react";
 import { glass } from "@/lib/design-tokens";
 import type { ChatMessage as ChatMessageType } from "@/types/chat";
 import { ChatMessageActions } from "./ChatMessageActions";
+import { ChatSkillResult } from "./ChatSkillResult";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -11,6 +12,11 @@ interface ChatMessageProps {
 
 export function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === "user";
+
+  // Dispatch to skill result component for skill execution messages
+  if (message.metadata?.skill_execution_id) {
+    return <ChatSkillResult message={message} />;
+  }
 
   if (message.error) {
     return (

@@ -105,6 +105,18 @@ export default function HomePage({ userName }: HomePageProps) {
     onMemoryDeleted: (memoryId) => {
       setRecentMemories((prev) => prev.filter((m) => m.id !== memoryId));
     },
+    onSkillExecuted: (_memoryId, data) => {
+      const info = data as { skill_name?: string; memory_title?: string; memory_id?: number };
+      toast.success(`${info.skill_name || "Skill"} executed`, {
+        description: info.memory_title || "on a memory",
+        action: info.memory_id
+          ? {
+              label: "View Result",
+              onClick: () => navigate(`/memories?open=${info.memory_id}`),
+            }
+          : undefined,
+      });
+    },
   });
 
   const fetchRecentMemories = async () => {

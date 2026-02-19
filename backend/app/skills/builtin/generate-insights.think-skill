@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+
+  "id": "a1b2c3d4-0002-4000-a000-000000000002",
+  "name": "Generate Insights",
+  "description": "Surface key themes, patterns, and takeaways from any saved content",
+  "icon": "\ud83d\udca1",
+  "logo": null,
+  "version": "1.0.0",
+  "category": "analysis",
+  "tags": ["themes", "patterns", "takeaways"],
+
+  "author": {
+    "name": "ThinkOS Team",
+    "url": "https://github.com/ThinkFoundation"
+  },
+
+  "input": {
+    "type": "single_memory",
+    "accepts": ["web", "note", "voice_memo", "audio", "video", "document"]
+  },
+
+  "parameters": [
+    {
+      "id": "depth",
+      "label": "Analysis Depth",
+      "description": "How thorough the analysis should be",
+      "type": "select",
+      "options": ["quick", "detailed", "comprehensive"],
+      "default": "detailed"
+    },
+    {
+      "id": "focus",
+      "label": "Focus Area",
+      "description": "Which aspects to prioritize in the analysis",
+      "type": "select",
+      "options": ["general", "trends", "risks", "opportunities"],
+      "default": "general"
+    }
+  ],
+
+  "prompt": {
+    "system": "You are an analytical assistant that identifies key insights from content. You surface themes, patterns, notable points, and actionable takeaways. Be specific and reference the source material. Output as clean Markdown with clear headings.",
+    "user_template": "Analyze the following content and generate insights.\n\nAnalysis depth: {{depth}}\nFocus area: {{focus}}\n\n---\n\n{{content}}"
+  },
+
+  "output": {
+    "format": "markdown"
+  },
+
+  "triggers": {
+    "chat": {
+      "patterns": ["insights", "analyze", "key points", "takeaways", "erkenntnisse"],
+      "intent_description": "User wants to extract insights or key themes from content",
+      "auto_parameters": {
+        "depth": "detailed",
+        "focus": "general"
+      }
+    }
+  }
+}

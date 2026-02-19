@@ -14,6 +14,8 @@ class EventType(str, Enum):
     MEMORY_CREATED = "memory_created"
     MEMORY_UPDATED = "memory_updated"
     MEMORY_DELETED = "memory_deleted"
+    MEMORY_PROCESSED = "memory_processed"
+    SKILL_EXECUTED = "skill_executed"
     CONVERSATION_CREATED = "conversation_created"
     CONVERSATION_UPDATED = "conversation_updated"
     CONVERSATION_DELETED = "conversation_deleted"

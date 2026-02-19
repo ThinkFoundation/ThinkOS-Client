@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+
+  "id": "a1b2c3d4-0003-4000-a000-000000000003",
+  "name": "Export to Markdown",
+  "description": "Convert saved content to clean, portable Markdown with optional metadata",
+  "icon": "\ud83d\udcdd",
+  "logo": null,
+  "version": "1.0.0",
+  "category": "export",
+  "tags": ["markdown", "export", "formatting"],
+
+  "author": {
+    "name": "ThinkOS Team",
+    "url": "https://github.com/ThinkFoundation"
+  },
+
+  "input": {
+    "type": "single_memory",
+    "accepts": ["web", "note", "voice_memo", "audio", "video", "document"]
+  },
+
+  "parameters": [
+    {
+      "id": "include_metadata",
+      "label": "Include Metadata Header",
+      "description": "Add a YAML-style metadata header with title, source URL, date, and tags",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "id": "clean_formatting",
+      "label": "Clean Up Formatting",
+      "description": "Remove artifacts, fix headings, and normalize whitespace for clean output",
+      "type": "boolean",
+      "default": true
+    }
+  ],
+
+  "prompt": {
+    "system": "You are a formatting assistant that converts content into clean, well-structured Markdown. Preserve all information but improve readability. Fix broken formatting, normalize headings, and ensure consistent style. Do not add, remove, or change any facts.",
+    "user_template": "Convert the following content to clean Markdown.\n\nInclude metadata header: {{include_metadata}}\nClean up formatting: {{clean_formatting}}\n\nTitle: {{memory_title}}\nSource: {{memory_url}}\nDate: {{memory_date}}\nType: {{memory_type}}\nTags: {{memory_tags}}\n\n---\n\n{{content}}"
+  },
+
+  "output": {
+    "format": "markdown"
+  },
+
+  "triggers": {
+    "chat": {
+      "patterns": ["export", "markdown", "convert to md", "exportieren"],
+      "intent_description": "User wants to export or convert content to Markdown format",
+      "auto_parameters": {
+        "include_metadata": true,
+        "clean_formatting": true
+      }
+    }
+  }
+}

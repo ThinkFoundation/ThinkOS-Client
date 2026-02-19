@@ -64,6 +64,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
             ...m,
             timestamp: new Date(m.created_at || ""),
             sources: m.sources || [],
+            metadata: m.metadata || undefined,
           }))
         );
 

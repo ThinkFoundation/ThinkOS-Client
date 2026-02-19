@@ -39,6 +39,10 @@ declare global {
       removeVideoProcessListeners: () => void;
       // Document viewing
       openDocumentWithSystem: (documentId: number, filename: string) => Promise<{ success: boolean; error?: string }>;
+      // Skill file import/export
+      onImportSkillFile: (callback: (data: { filePath: string; content: string }) => void) => void;
+      removeImportSkillFileListener: () => void;
+      saveSkillFile: (content: string, suggestedName: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
     };
   }
 }
