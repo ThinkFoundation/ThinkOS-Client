@@ -14,11 +14,13 @@ from .schemas import MemoryCreate, format_memory_for_embedding
 from .services.embeddings import (
     get_embedding, get_current_embedding_model,
     filter_memories_dynamically, format_memories_as_context,
+    compute_context_budget,
 )
 from .services.ai import (
-    chat, process_memory_async, process_conversation_title_async,
+    chat, get_model, process_memory_async, process_conversation_title_async,
     maybe_rewrite_query, generate_followup_suggestions,
 )
+from .models_info import get_context_window
 from .services.query import preprocess_query, extract_keywords, is_special_prompt, execute_special_handler
 from .events import event_manager, MemoryEvent, EventType
 
@@ -283,6 +285,14 @@ Summary:"""
         sources = []
         return_page_summary = None
 
+        # Compute context budget based on model and conversation history
+        model = get_model()
+        context_window = get_context_window(model)
+        # Account for page content that will also consume context space
+        page_content_chars = min(len(page_content), 8000) if page_content else 0
+        context_budget = compute_context_budget(context_window, history)
+        context_budget = max(2000, context_budget - page_content_chars)
+
         # Generate page summary for memory search (only on first message)
         if page_content and not page_summary:
             page_summary = await self._generate_page_summary(page_content, page_title)
@@ -333,7 +343,7 @@ Summary:"""
                     # Use model-specific thresholds for filtering
                     embedding_model = get_current_embedding_model()
                     filtered_memories = filter_memories_dynamically(
-                        memories, embedding_model=embedding_model
+                        memories, embedding_model=embedding_model, context_budget_chars=context_budget
                     )
 
                     # Build sources list for the response
@@ -349,7 +359,7 @@ Summary:"""
                     ]
 
                     # Format memories as context
-                    memories_context = format_memories_as_context(filtered_memories)
+                    memories_context = format_memories_as_context(filtered_memories, max_chars=context_budget)
                     if memories_context:
                         context_parts.append(memories_context)
 

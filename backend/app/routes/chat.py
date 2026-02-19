@@ -14,7 +14,7 @@ from ..services.query.processing import preprocess_query, extract_keywords
 from ..services.ai.query_rewriting import maybe_rewrite_query
 from ..services.ai.suggestions import get_quick_prompts, generate_followup_suggestions
 from ..services.query.special_handlers import is_special_prompt, execute_special_handler
-from ..services.embeddings.filtering import filter_memories_dynamically, format_memories_as_context
+from ..services.embeddings.filtering import filter_memories_dynamically, format_memories_as_context, compute_context_budget
 from ..db.search import search_similar_memories
 from ..schemas import ChatRequest
 from .. import config
@@ -66,6 +66,11 @@ async def _retrieve_context(
     sources = []
     attached_context = ""
 
+    # Compute context budget based on model and conversation history
+    model = get_model()
+    context_window = get_context_window(model)
+    total_budget = compute_context_budget(context_window, history)
+
     # Handle explicitly attached memories first
     if attached_memory_ids:
         attached_memories = []
@@ -80,7 +85,9 @@ async def _retrieve_context(
                 })
 
         if attached_memories:
-            attached_context = "## User's Selected Memory:\n" + format_memories_as_context(attached_memories)
+            # Give attached memories up to half the budget; RAG gets the other half
+            attached_budget = total_budget // 2
+            attached_context = "## User's Selected Memory:\n" + format_memories_as_context(attached_memories, max_chars=attached_budget)
             logger.info(f"Using {len(attached_memories)} attached memories as context")
 
     # Skip RAG for very short messages (< 10 chars) or when explicitly disabled
@@ -118,9 +125,13 @@ async def _retrieve_context(
             )
 
             if similar_memories:
+                # RAG budget: half if attached memories exist, full otherwise
+                rag_budget = total_budget // 2 if attached_context else total_budget
                 # Filter using dynamic threshold with model-specific thresholds
-                filtered_memories = filter_memories_dynamically(similar_memories, embedding_model=embedding_model)
-                context = format_memories_as_context(filtered_memories)
+                filtered_memories = filter_memories_dynamically(
+                    similar_memories, embedding_model=embedding_model, context_budget_chars=rag_budget
+                )
+                context = format_memories_as_context(filtered_memories, max_chars=rag_budget)
                 # Build sources list from filtered memories, avoiding duplicates with attached
                 attached_ids = {s["id"] for s in sources}
                 for m in filtered_memories:
