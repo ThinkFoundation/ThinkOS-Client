@@ -153,9 +153,15 @@
   .chat-prose p:last-child {
     margin-bottom: 0;
   }
-  .chat-prose ul, .chat-prose ol {
+  .chat-prose ul {
     margin: 0.5em 0;
     padding-left: 1.5em;
+    list-style-type: disc;
+  }
+  .chat-prose ol {
+    margin: 0.5em 0;
+    padding-left: 1.5em;
+    list-style-type: decimal;
   }
   .chat-prose li {
     margin: 0.25em 0;

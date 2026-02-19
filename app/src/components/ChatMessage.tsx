@@ -42,7 +42,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
             "p-4 rounded-2xl",
             isUser
               ? "bg-primary text-primary-foreground"
-              : cn(glass.base, glass.hover)
+              : glass.base
           )}
         >
           {isUser ? (
