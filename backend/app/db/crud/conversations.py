@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from sqlalchemy import select, func, and_
 
@@ -129,6 +130,7 @@ async def get_conversation(conversation_id: int) -> dict | None:
                     "prompt_tokens": m.prompt_tokens,
                     "completion_tokens": m.completion_tokens,
                     "total_tokens": m.total_tokens,
+                    "metadata": json.loads(m.msg_metadata) if m.msg_metadata else None,
                 })
 
             return {
@@ -190,6 +192,7 @@ async def add_message(
     content: str,
     sources: list[dict] | None = None,
     usage: dict | None = None,
+    metadata: str | None = None,
 ) -> dict | None:
     """Add a message to a conversation with optional sources and token usage."""
     def _add():
@@ -209,6 +212,9 @@ async def add_message(
                 message.prompt_tokens = usage.get("prompt_tokens")
                 message.completion_tokens = usage.get("completion_tokens")
                 message.total_tokens = usage.get("total_tokens")
+
+            if metadata:
+                message.msg_metadata = metadata
 
             session.add(message)
             session.flush()  # Get message.id before adding sources
@@ -239,6 +245,7 @@ async def add_message(
                 "prompt_tokens": message.prompt_tokens,
                 "completion_tokens": message.completion_tokens,
                 "total_tokens": message.total_tokens,
+                "metadata": json.loads(message.msg_metadata) if message.msg_metadata else None,
             }
 
     return await run_sync(_add)

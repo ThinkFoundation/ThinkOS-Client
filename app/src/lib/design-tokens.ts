@@ -8,6 +8,7 @@ export const glass = {
   base: "bg-white/70 dark:bg-white/5 backdrop-blur-md border border-white/60 dark:border-white/10 shadow-sm shadow-black/5 dark:shadow-black/20",
   hover:
     "hover:shadow-lg hover:shadow-black/10 dark:hover:shadow-black/30 hover:scale-[1.01] hover:-translate-y-0.5 transition-all duration-200",
+  elevated: "bg-white/60 dark:bg-white/[0.05] backdrop-blur-lg border border-white/50 dark:border-white/[0.08] shadow-md shadow-black/5 dark:shadow-black/20",
   panel: "bg-white/60 dark:bg-white/[0.04] backdrop-blur-xl border border-white/50 dark:border-white/[0.08] shadow-md",
   card: "bg-white/50 dark:bg-white/[0.03] backdrop-blur-sm border border-white/40 dark:border-white/[0.06]",
   overlay: "bg-white/40 dark:bg-white/[0.03] backdrop-blur-md border border-white/30 dark:border-white/[0.05]",
@@ -77,3 +78,25 @@ export const communityColors = [
 export function getCommunityColor(index: number): string {
   return communityColors[index % communityColors.length];
 }
+
+// Skill category colors — distinct colors for visual scanning
+export const skillCategoryColors = {
+  productivity: { bg: "bg-blue-500/10",    text: "text-blue-600 dark:text-blue-400",    border: "border-blue-500/20",    dot: "bg-blue-500" },
+  analysis:     { bg: "bg-violet-500/10",   text: "text-violet-600 dark:text-violet-400", border: "border-violet-500/20",  dot: "bg-violet-500" },
+  export:       { bg: "bg-emerald-500/10",  text: "text-emerald-600 dark:text-emerald-400", border: "border-emerald-500/20", dot: "bg-emerald-500" },
+  writing:      { bg: "bg-amber-500/10",    text: "text-amber-600 dark:text-amber-400",   border: "border-amber-500/20",   dot: "bg-amber-500" },
+  research:     { bg: "bg-cyan-500/10",     text: "text-cyan-600 dark:text-cyan-400",     border: "border-cyan-500/20",    dot: "bg-cyan-500" },
+  custom:       { bg: "bg-pink-500/10",     text: "text-pink-600 dark:text-pink-400",     border: "border-pink-500/20",    dot: "bg-pink-500" },
+} as const;
+
+export function getSkillCategoryColor(category: string) {
+  return skillCategoryColors[category as keyof typeof skillCategoryColors]
+    ?? { bg: "bg-slate-500/10", text: "text-slate-500", border: "border-slate-500/20", dot: "bg-slate-500" };
+}
+
+// Execution status colors
+export const executionStatus = {
+  completed: { bg: "bg-emerald-500/10", text: "text-emerald-600 dark:text-emerald-400", icon: "text-emerald-500", dot: "bg-emerald-500" },
+  running:   { bg: "bg-amber-500/10",   text: "text-amber-600 dark:text-amber-400",     icon: "text-amber-500",   dot: "bg-amber-500" },
+  failed:    { bg: "bg-red-500/10",      text: "text-red-600 dark:text-red-400",         icon: "text-red-500",     dot: "bg-red-500" },
+} as const;

@@ -290,6 +290,15 @@ async def process_memory_async(memory_id: int) -> None:
             )
             logger.info(f"Emitted update event for memory {memory_id}")
 
+            # Fire MEMORY_PROCESSED event (for trigger evaluation)
+            await event_manager.publish(
+                MemoryEvent(
+                    type=EventType.MEMORY_PROCESSED,
+                    memory_id=memory_id,
+                    data=updated_memory,
+                )
+            )
+
     except Exception as e:
         logger.error(f"Failed to process memory {memory_id}: {e}")
 
@@ -531,6 +540,15 @@ async def process_voice_memory_async(memory_id: int) -> None:
         )
         logger.info(f"Emitted update event for voice memory {memory_id}")
 
+        # Fire MEMORY_PROCESSED event (for trigger evaluation)
+        await event_manager.publish(
+            MemoryEvent(
+                type=EventType.MEMORY_PROCESSED,
+                memory_id=memory_id,
+                data=updated_memory,
+            )
+        )
+
     except Exception as e:
         logger.error(f"Failed to process voice memory {memory_id}: {e}")
         # Set status to failed and notify frontend
@@ -677,6 +695,15 @@ async def process_document_memory_async(memory_id: int) -> None:
             )
         )
         logger.info(f"Emitted update event for document memory {memory_id}")
+
+        # Fire MEMORY_PROCESSED event (for trigger evaluation)
+        await event_manager.publish(
+            MemoryEvent(
+                type=EventType.MEMORY_PROCESSED,
+                memory_id=memory_id,
+                data=updated_memory,
+            )
+        )
 
     except Exception as e:
         logger.error(f"Failed to process document memory {memory_id}: {e}")

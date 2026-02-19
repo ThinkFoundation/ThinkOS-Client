@@ -4,6 +4,18 @@ export interface SourceMemory {
   id: number;
   title: string;
   url?: string;
+  type?: string;
+}
+
+export interface SkillSuggestion {
+  skill_id: string;
+  skill_name: string;
+  skill_icon: string;
+  memory_id: number;
+  memory_title: string;
+  auto_parameters: Record<string, unknown>;
+  match_reason: string;
+  matched_pattern: string;
 }
 
 export interface AttachedMemory {
@@ -58,6 +70,15 @@ export interface TokenUsage {
   total_tokens: number;
 }
 
+export interface SkillMessageMetadata {
+  skill_execution_id?: number;
+  skill_id?: string;
+  skill_name?: string;
+  skill_icon?: string;
+  memory_id?: number;
+  memory_title?: string;
+}
+
 export interface ChatMessage {
   id: string | number;
   role: "user" | "assistant";
@@ -72,6 +93,8 @@ export interface ChatMessage {
   prompt_tokens?: number;
   completion_tokens?: number;
   total_tokens?: number;
+  // Skill execution metadata (for chat skill results)
+  metadata?: SkillMessageMetadata | null;
 }
 
 export interface Conversation {

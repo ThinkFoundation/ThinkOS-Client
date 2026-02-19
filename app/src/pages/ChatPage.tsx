@@ -9,7 +9,7 @@ import { ContextUsageIndicator } from "@/components/ContextUsageIndicator";
 import { AttachedMemoryChips } from "@/components/AttachedMemoryChips";
 import { useConversation } from "@/contexts/ConversationContext";
 import { useConversations } from "@/hooks/useConversations";
-import type { ChatMessage } from "@/types/chat";
+import type { ChatMessage, SkillSuggestion } from "@/types/chat";
 import { FileText, Pin, Trash2, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,8 @@ export default function ChatPage() {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [followupSuggestions, setFollowupSuggestions] = useState<string[]>([]);
+  const [skillSuggestions, setSkillSuggestions] = useState<SkillSuggestion[]>([]);
+  const [isExecutingSkill, setIsExecutingSkill] = useState(false);
   const [useMemories, setUseMemories] = useState(true);
   const isStartingNewChatRef = useRef(false);
   const wantsNewChatRef = useRef(false);
@@ -87,8 +89,9 @@ export default function ChatPage() {
     // Clear new chat flag since user is now sending a message
     wantsNewChatRef.current = false;
 
-    // Clear previous follow-up suggestions when sending a new message
+    // Clear previous follow-up and skill suggestions when sending a new message
     setFollowupSuggestions([]);
+    setSkillSuggestions([]);
 
     // Capture attached memories before clearing (they're consumed with this message)
     const memoriesToSend = [...attachedMemories];
@@ -190,6 +193,10 @@ export default function ChatPage() {
                     sources: data.sources || [],
                     searched: data.searched || false,
                   });
+                  // Parse skill suggestions from meta event
+                  if (data.skill_suggestions && Array.isArray(data.skill_suggestions)) {
+                    setSkillSuggestions(data.skill_suggestions);
+                  }
                 } else if (data.type === "token") {
                   content += data.content;
                   updateMessage(assistantMessageId, { content });
@@ -260,6 +267,124 @@ export default function ChatPage() {
   const handleChat = useCallback(() => {
     submitChat(message, currentConversationId);
   }, [message, currentConversationId, submitChat]);
+
+  // Handler for executing a skill suggestion inline in chat
+  const handleExecuteSkill = useCallback(async (suggestion: SkillSuggestion) => {
+    if (!currentConversationId) return;
+
+    setIsExecutingSkill(true);
+    setSkillSuggestions([]); // Clear suggestions once one is selected
+
+    const assistantMessageId = crypto.randomUUID();
+    addMessage({
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      timestamp: new Date(),
+      isStreaming: true,
+      metadata: {
+        skill_execution_id: -1, // Placeholder until meta arrives
+        skill_id: suggestion.skill_id,
+        skill_name: suggestion.skill_name,
+        skill_icon: suggestion.skill_icon,
+        memory_id: suggestion.memory_id,
+        memory_title: suggestion.memory_title,
+      },
+    });
+
+    let content = "";
+
+    try {
+      const res = await apiFetch("/api/chat/execute-skill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          skill_id: suggestion.skill_id,
+          memory_id: suggestion.memory_id,
+          conversation_id: currentConversationId,
+          parameters: suggestion.auto_parameters,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to execute skill");
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No reader available");
+
+      try {
+        const decoder = new TextDecoder();
+        let sseBuffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          sseBuffer += decoder.decode(value, { stream: true });
+          const lines = sseBuffer.split("\n");
+          sseBuffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.type === "meta") {
+                  updateMessage(assistantMessageId, {
+                    metadata: {
+                      skill_execution_id: data.execution_id,
+                      skill_id: suggestion.skill_id,
+                      skill_name: data.skill_name || suggestion.skill_name,
+                      skill_icon: data.skill_icon || suggestion.skill_icon,
+                      memory_id: suggestion.memory_id,
+                      memory_title: suggestion.memory_title,
+                    },
+                  });
+                } else if (data.type === "token") {
+                  content += data.content;
+                  updateMessage(assistantMessageId, { content });
+                } else if (data.type === "done") {
+                  updateMessage(assistantMessageId, { isStreaming: false });
+                } else if (data.type === "error") {
+                  updateMessage(assistantMessageId, {
+                    content: data.message,
+                    error: true,
+                    isStreaming: false,
+                  });
+                }
+              } catch (e) {
+                console.warn("Failed to parse skill SSE data:", line.slice(6), e);
+              }
+            }
+          }
+        }
+
+        // Process remaining buffer
+        if (sseBuffer.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(sseBuffer.slice(6));
+            if (data.type === "token") {
+              content += data.content;
+              updateMessage(assistantMessageId, { content });
+            } else if (data.type === "done") {
+              updateMessage(assistantMessageId, { isStreaming: false });
+            }
+          } catch {
+            // Ignore incomplete final chunk
+          }
+        }
+      } finally {
+        reader.cancel().catch(() => {});
+      }
+    } catch (err) {
+      updateMessage(assistantMessageId, {
+        content: "Failed to execute skill",
+        error: true,
+        isStreaming: false,
+      });
+      console.error("Skill execution failed:", err);
+    } finally {
+      setIsExecutingSkill(false);
+    }
+  }, [currentConversationId, addMessage, updateMessage]);
 
   // Effect: Handle ?new=true param from navigation (e.g., from HomePage "New Conversation")
   useEffect(() => {
@@ -354,6 +479,9 @@ export default function ChatPage() {
             isLoading={isLoading}
             onSendMessage={(msg) => submitChat(msg, currentConversationId)}
             followupSuggestions={followupSuggestions}
+            skillSuggestions={skillSuggestions}
+            onExecuteSkill={handleExecuteSkill}
+            isExecutingSkill={isExecutingSkill}
           />
         )}
 

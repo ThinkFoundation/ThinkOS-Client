@@ -64,4 +64,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   // Document viewing
   openDocumentWithSystem: (documentId, filename) => ipcRenderer.invoke('open-document-with-system', documentId, filename),
+  // Skill file import/export
+  onImportSkillFile: (callback) => {
+    ipcRenderer.on('import-skill-file', (_, data) => callback(data));
+  },
+  removeImportSkillFileListener: () => {
+    ipcRenderer.removeAllListeners('import-skill-file');
+  },
+  saveSkillFile: (content, suggestedName) => ipcRenderer.invoke('save-skill-file', content, suggestedName),
 });

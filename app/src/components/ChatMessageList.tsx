@@ -3,7 +3,8 @@ import { Loader2, Search } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { ChatMessage } from "./ChatMessage";
 import { PromptChips } from "./PromptChips";
-import type { ChatMessage as ChatMessageType } from "@/types/chat";
+import { ChatSkillChips } from "./ChatSkillChips";
+import type { ChatMessage as ChatMessageType, SkillSuggestion } from "@/types/chat";
 
 // Fallback prompts in case API fails
 const FALLBACK_PROMPTS = [
@@ -22,6 +23,9 @@ interface ChatMessageListProps {
   isLoading?: boolean;
   onSendMessage?: (message: string) => void;
   followupSuggestions?: string[];
+  skillSuggestions?: SkillSuggestion[];
+  onExecuteSkill?: (suggestion: SkillSuggestion) => void;
+  isExecutingSkill?: boolean;
 }
 
 export function ChatMessageList({
@@ -29,6 +33,9 @@ export function ChatMessageList({
   isLoading,
   onSendMessage,
   followupSuggestions = [],
+  skillSuggestions = [],
+  onExecuteSkill,
+  isExecutingSkill = false,
 }: ChatMessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [quickPrompts, setQuickPrompts] = useState<string[]>(FALLBACK_PROMPTS);
@@ -130,6 +137,16 @@ export function ChatMessageList({
           </div>
         </div>
       )}
+      {!isLoading &&
+        !hasStreamingMessage &&
+        skillSuggestions.length > 0 &&
+        onExecuteSkill && (
+          <ChatSkillChips
+            suggestions={skillSuggestions}
+            onExecute={onExecuteSkill}
+            isExecuting={isExecutingSkill}
+          />
+        )}
       {showFollowups && onSendMessage && (
         <PromptChips
           prompts={followupSuggestions}

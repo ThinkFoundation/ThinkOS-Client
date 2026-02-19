@@ -9,6 +9,8 @@ import MemoriesPage from "./pages/MemoriesPage";
 import GraphPage from "./pages/GraphPage";
 import SettingsPage from "./pages/SettingsPage";
 import RecordingPage from "./pages/RecordingPage";
+import SkillsPage from "./pages/SkillsPage";
+import SkillEditor from "./components/SkillEditor";
 import { NamePromptDialog } from "./components/NamePromptDialog";
 import { Button } from "@/components/ui/button";
 import { Lock } from "lucide-react";
@@ -188,6 +190,22 @@ function App() {
     }
   }, [appState]);
 
+  // Listen for .think-skill file imports from Electron
+  useEffect(() => {
+    if (appState !== "ready") return;
+    if (!window.electronAPI?.onImportSkillFile) return;
+
+    window.electronAPI.onImportSkillFile((data: { filePath: string; content: string }) => {
+      window.dispatchEvent(
+        new CustomEvent("import-skill-file", { detail: data })
+      );
+    });
+
+    return () => {
+      window.electronAPI?.removeImportSkillFileListener?.();
+    };
+  }, [appState]);
+
   // Listen for app updates
   useEffect(() => {
     if (window.electronAPI?.onUpdateDownloaded) {
@@ -285,6 +303,9 @@ function App() {
             <Route path="/memories" element={<MemoriesPage />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/graph" element={<GraphPage />} />
+            <Route path="/skills" element={<SkillsPage />} />
+            <Route path="/skills/new" element={<SkillEditor />} />
+            <Route path="/skills/:id/edit" element={<SkillEditor />} />
             <Route
               path="/settings"
               element={<SettingsPage onNameChange={setUserName} />}

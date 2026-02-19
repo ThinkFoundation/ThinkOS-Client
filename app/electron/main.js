@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, shell, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { spawn, execSync } = require('child_process');
 const crypto = require('crypto');
@@ -64,6 +64,9 @@ function downloadFile(url, destPath, onProgress) {
 let mainWindow;
 let pythonProcess;
 let backendReady = false;
+
+// Buffer for .think-skill file opened before window is ready
+let pendingSkillFilePath = null;
 
 // Generate a secure random token for API authentication
 // This ensures only this Electron app can access the Python backend
@@ -322,6 +325,50 @@ function createWindow() {
   }
 }
 
+// Handle .think-skill file association
+function sendSkillFileToRenderer(filePath) {
+  if (!filePath || !filePath.endsWith('.think-skill')) return;
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('import-skill-file', { filePath, content });
+    } else {
+      pendingSkillFilePath = filePath;
+    }
+  } catch (err) {
+    console.error('Failed to read .think-skill file:', err);
+  }
+}
+
+// macOS: file opened via double-click or Finder
+app.on('open-file', (event, filePath) => {
+  event.preventDefault();
+  if (app.isReady()) {
+    sendSkillFileToRenderer(filePath);
+  } else {
+    pendingSkillFilePath = filePath;
+  }
+});
+
+// Windows/Linux: request single instance lock for file association
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, argv) => {
+    // argv may contain the .think-skill file path (last argument on Win/Linux)
+    const skillFile = argv.find(arg => arg.endsWith('.think-skill'));
+    if (skillFile) {
+      sendSkillFileToRenderer(skillFile);
+    }
+    // Focus existing window
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
 app.whenReady().then(async () => {
   // Set app name (for dev mode - production uses productName from package.json)
   app.setName('Think');
@@ -363,6 +410,12 @@ app.whenReady().then(async () => {
     // Initialize system tray after backend is ready
     const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
     createTray(mainWindow, APP_TOKEN, isDev);
+
+    // Send pending skill file if app was opened via file association
+    if (pendingSkillFilePath) {
+      sendSkillFileToRenderer(pendingSkillFilePath);
+      pendingSkillFilePath = null;
+    }
   } catch (err) {
     console.error('Backend startup failed:', err);
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -636,6 +689,27 @@ ipcMain.handle('delete-temp-file', async (_event, filePath) => {
     return { success: true };
   } catch (error) {
     console.error('[IPC] delete-temp-file error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Save a .think-skill file via system dialog
+ipcMain.handle('save-skill-file', async (_event, content, suggestedName) => {
+  try {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: suggestedName,
+      filters: [
+        { name: 'ThinkOS Skill', extensions: ['think-skill'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    if (result.canceled || !result.filePath) {
+      return { success: false };
+    }
+    fs.writeFileSync(result.filePath, content, 'utf-8');
+    return { success: true, filePath: result.filePath };
+  } catch (error) {
+    console.error('[IPC] save-skill-file error:', error);
     return { success: false, error: error.message };
   }
 });

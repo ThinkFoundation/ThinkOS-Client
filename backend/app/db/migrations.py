@@ -609,6 +609,124 @@ def migration_019(conn: Connection) -> None:
         ))
 
 
+@migration(20, "Create skills and skill_executions tables")
+def migration_020(conn: Connection) -> None:
+    """Create tables for the Skill System Phase 1.
+
+    - skills: Stores skill definitions (built-in and user-created)
+    - skill_executions: Tracks each skill execution with result
+    """
+    # --- skills table ---
+    result = conn.execute(text(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='skills'"
+    )).fetchone()
+
+    if not result:
+        conn.execute(text("""
+            CREATE TABLE skills (
+                id TEXT PRIMARY KEY,
+                schema_version INTEGER NOT NULL DEFAULT 1,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                icon TEXT NOT NULL,
+                logo TEXT,
+                version TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT 'custom',
+                tags TEXT,
+                author_name TEXT,
+                author_url TEXT,
+                input_type TEXT NOT NULL DEFAULT 'single_memory',
+                input_accepts TEXT,
+                parameters TEXT,
+                prompt_system TEXT NOT NULL,
+                prompt_user_template TEXT NOT NULL,
+                output_format TEXT NOT NULL DEFAULT 'markdown',
+                triggers TEXT,
+                source TEXT NOT NULL,
+                hidden BOOLEAN NOT NULL DEFAULT 0,
+                definition TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+
+    # --- skill_executions table ---
+    result = conn.execute(text(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='skill_executions'"
+    )).fetchone()
+
+    if not result:
+        conn.execute(text("""
+            CREATE TABLE skill_executions (
+                id INTEGER PRIMARY KEY,
+                skill_id TEXT NOT NULL,
+                memory_id INTEGER NOT NULL,
+                trigger_type TEXT NOT NULL,
+                parameters TEXT,
+                status TEXT NOT NULL,
+                result TEXT,
+                error TEXT,
+                started_at TIMESTAMP,
+                completed_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE,
+                FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+            )
+        """))
+
+        conn.execute(text(
+            "CREATE INDEX idx_skill_executions_skill_id ON skill_executions(skill_id)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX idx_skill_executions_memory_id ON skill_executions(memory_id)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX idx_skill_executions_created_at ON skill_executions(created_at DESC)"
+        ))
+
+
+@migration(21, "Create skill_triggers table for automation")
+def migration_021(conn: Connection) -> None:
+    """Create skill_triggers table for trigger-engine (Phase 3)."""
+    result = conn.execute(text(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='skill_triggers'"
+    )).fetchone()
+
+    if not result:
+        conn.execute(text("""
+            CREATE TABLE skill_triggers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                skill_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT,
+                enabled BOOLEAN NOT NULL DEFAULT 1,
+                event_type TEXT NOT NULL DEFAULT 'on_save',
+                conditions TEXT NOT NULL,
+                parameters TEXT,
+                execution_count INTEGER NOT NULL DEFAULT 0,
+                last_triggered_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+            )
+        """))
+        conn.execute(text(
+            "CREATE INDEX idx_skill_triggers_skill_id ON skill_triggers(skill_id)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX idx_skill_triggers_enabled ON skill_triggers(enabled)"
+        ))
+
+
+@migration(22, "Add metadata column to messages for skill execution tracking")
+def migration_022(conn: Connection) -> None:
+    """Add metadata column to messages table for chat skill execution."""
+    result = conn.execute(text("PRAGMA table_info(messages)")).fetchall()
+    columns = [row[1] for row in result]
+    if "metadata" not in columns:
+        conn.execute(text("ALTER TABLE messages ADD COLUMN metadata TEXT"))
+
+
 # --- Migration runner ---
 
 def run_migrations(conn: Connection) -> list[tuple[int, str]]:

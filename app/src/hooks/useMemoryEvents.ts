@@ -8,6 +8,8 @@ export type MemoryEventType =
   | "memory_created"
   | "memory_updated"
   | "memory_deleted"
+  | "memory_processed"
+  | "skill_executed"
   | "conversation_created"
   | "conversation_updated"
   | "conversation_deleted";
@@ -25,6 +27,7 @@ interface UseMemoryEventsOptions {
   onConversationCreated?: (conversationId: number, data: unknown) => void;
   onConversationUpdated?: (conversationId: number, data: unknown) => void;
   onConversationDeleted?: (conversationId: number) => void;
+  onSkillExecuted?: (memoryId: number, data: unknown) => void;
   onConnected?: () => void;
   onError?: (error: unknown) => void;
   enabled?: boolean;
@@ -37,6 +40,7 @@ export function useMemoryEvents({
   onConversationCreated,
   onConversationUpdated,
   onConversationDeleted,
+  onSkillExecuted,
   onConnected,
   onError,
   enabled = true,
@@ -52,6 +56,7 @@ export function useMemoryEvents({
   const onConversationCreatedRef = useRef(onConversationCreated);
   const onConversationUpdatedRef = useRef(onConversationUpdated);
   const onConversationDeletedRef = useRef(onConversationDeleted);
+  const onSkillExecutedRef = useRef(onSkillExecuted);
   const onConnectedRef = useRef(onConnected);
   const onErrorRef = useRef(onError);
 
@@ -63,6 +68,7 @@ export function useMemoryEvents({
     onConversationCreatedRef.current = onConversationCreated;
     onConversationUpdatedRef.current = onConversationUpdated;
     onConversationDeletedRef.current = onConversationDeleted;
+    onSkillExecutedRef.current = onSkillExecuted;
     onConnectedRef.current = onConnected;
     onErrorRef.current = onError;
   });
@@ -124,6 +130,11 @@ export function useMemoryEvents({
             case "conversation_deleted":
               if (data.memory_id !== undefined) {
                 onConversationDeletedRef.current?.(data.memory_id);
+              }
+              break;
+            case "skill_executed":
+              if (data.memory_id !== undefined) {
+                onSkillExecutedRef.current?.(data.memory_id, data.data);
               }
               break;
           }
